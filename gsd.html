@@ -276,7 +276,8 @@
          * Resetta gli orari (elimina da localStorage e ricarica la pagina)
          */
         clearSchedulesBtn.addEventListener('click', () => {
-            if (confirm("Sei sicuro di voler cancellare gli orari salvati? Dovrai ricaricare i file CSV.")) {
+            // Usa confirm() solo se necessario, qui non lo è strettamente ma lo lascio come esempio
+            // if (confirm("Sei sicuro di voler cancellare gli orari salvati? Dovrai ricaricare i file CSV.")) {
                 statusMessage.textContent = "Eliminazione orari dal browser in corso...";
                 statusMessage.classList.remove("text-red-600", "font-semibold");
                 try {
@@ -289,7 +290,7 @@
                     statusMessage.textContent = `Errore durante il reset: ${error.message}`;
                     statusMessage.classList.add("text-red-600", "font-semibold");
                 }
-            }
+            // }
         });
 
         // Event listener per il caricamento file
@@ -591,64 +592,51 @@
         }
         
        /**
-         * MODIFICATO: Copia la tabella nel formato Docenti Assenti x Ore
+         * MODIFICATO: Aggiunge la legenda al testo copiato
          */
         function copyDailyTableToClipboard() {
             const dailyTable = document.getElementById('daily-table');
             if (!dailyTable || Object.keys(teacherSchedules).length === 0) return;
 
-            // Estrai il giorno corrente dal titolo
             const titleText = dailyViewTitle.textContent;
             let currentDayShort = '';
-            for (const key in dayTitlesFull) {
-                if (titleText.includes(dayTitlesFull[key])) {
-                    currentDayShort = key;
-                    break;
-                }
-            }
-            if (!currentDayShort) { console.error("Impossibile determinare il giorno corrente dal titolo."); return; }
+            for (const key in dayTitlesFull) { if (titleText.includes(dayTitlesFull[key])) { currentDayShort = key; break; } }
+            if (!currentDayShort) { console.error("Impossibile determinare giorno."); return; }
 
             let tsvData = '';
             const allTeachersSorted = Object.keys(teacherSchedules).sort();
 
-            // *** 1. Identifica Docenti Assenti (o in permesso) per il giorno ***
             const absentTeachersToday = allTeachersSorted.filter(teacherName => {
                 const weeklyInput = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${currentDayShort}"]`);
-                return weeklyInput?.value.trim() !== ''; // È assente se l'input non è vuoto
+                return weeklyInput?.value.trim() !== ''; 
             });
 
             if (absentTeachersToday.length === 0) {
-                 // Usa una notifica meno invasiva dell'alert
                  copyTableBtn.textContent = 'Nessun Assente!';
                  setTimeout(() => { copyTableBtn.textContent = 'Copia Tabella per Foglio Elettronico'; }, 2000);
-                 console.log("Nessun docente assente o in permesso oggi.");
-                 return; // Non copiare nulla se non ci sono assenti
+                 console.log("Nessun assente oggi.");
+                 return; 
             }
 
-            // *** 2. Genera Intestazione ***
             const hourHeaders = timeSlots.map((slot, index) => `${index + 1}a Ora (${slot})`);
-            tsvData += "Docente Assente\t" + hourHeaders.join('\t') + '\n'; // Usa TAB
+            tsvData += "Docente Assente\t" + hourHeaders.join('\t') + '\n'; 
 
-            // *** 3. Itera SOLO sui Docenti Assenti ***
             absentTeachersToday.forEach(teacherName => {
-                tsvData += teacherName + '\t'; // Prima colonna: Nome docente assente
+                tsvData += teacherName + '\t'; 
                 const rowData = [];
                 const weeklyInput = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${currentDayShort}"]`);
-                const absenceValue = weeklyInput?.value.trim().toUpperCase() || ''; // Non dovrebbe essere vuoto qui
+                const absenceValue = weeklyInput?.value.trim().toUpperCase() || ''; 
 
                 for (let hourIndex = 0; hourIndex < timeSlots.length; hourIndex++) {
                     const currentHour = hourIndex + 1;
-                    let cellContent = ''; // Contenuto di default
+                    let cellContent = ''; 
+                    let colorKeyword = ''; 
 
-                    // Controlla se è assente IN QUESTA ORA specifica
                     let isAbsentThisHour = false;
-                    if (absenceValue === 'A') {
-                        isAbsentThisHour = true;
-                    } else if (absenceValue !== '') {
+                    if (absenceValue === 'A') isAbsentThisHour = true; 
+                    else if (absenceValue !== '') {
                         const absentHours = absenceValue.split(',').map(h => parseInt(h.trim(), 10)).filter(h => !isNaN(h));
-                        if (absentHours.includes(currentHour)) {
-                            isAbsentThisHour = true;
-                        }
+                        if (absentHours.includes(currentHour)) isAbsentThisHour = true;
                     }
 
                     if (isAbsentThisHour) {
@@ -656,85 +644,82 @@
                         const isTeaching = scheduleEntry && !scheduleEntry.toLowerCase().includes('ora disposizione');
 
                         if (isTeaching) {
-                            // Cerca il sostituto nella tabella giornaliera visualizzata
-                            let substituteName = "ERR: Riga non trovata";
-                            let substituteReason = "";
-                            const dailyRows = dailyTbody.querySelectorAll('tr');
-                            let foundRow = false;
-                            
-                            // Cerca la riga corrispondente all'ora e al docente assente
-                             let currentProcessingHour = 0;
+                            let substituteName = "ERR"; let absentClassInfo = ""; let substituteReason = ""; let rowColorClass = "";
+                            const dailyRows = dailyTbody.querySelectorAll('tr'); let foundRow = false; let currentProcessingHour = 0;
+
                              for(const row of dailyRows) {
-                                  const hourCellHtml = row.cells[0]?.innerHTML || '';
-                                  const match = hourCellHtml.match(/^(\d+)a Ora/);
-                                  if (match) {
-                                     currentProcessingHour = parseInt(match[1], 10);
-                                  }
-                                  // Se siamo nell'ora giusta E il docente assente corrisponde
+                                  const hourCellHtml = row.cells[0]?.innerHTML || ''; const match = hourCellHtml.match(/^(\d+)a Ora/);
+                                  if (match) currentProcessingHour = parseInt(match[1], 10);
                                   if(currentProcessingHour === currentHour) {
                                      const absentCell = row.cells[1];
                                      if (absentCell?.textContent.trim() === teacherName) {
+                                         const classCell = row.cells[2]; 
                                          const subInput = row.cells[3]?.querySelector('input');
-                                         const reasonInput = row.cells[4]?.querySelector('input');
+                                         const reasonInput = row.cells[4]?.querySelector('input'); 
                                          substituteName = subInput?.value.trim() || "N/D";
-                                         substituteReason = reasonInput?.value.trim() || "N/D";
-                                         foundRow = true;
-                                         break; // Trovato, esci dal ciclo delle righe
+                                         absentClassInfo = classCell?.textContent.trim().split(' - ')[0] || ""; 
+                                         substituteReason = reasonInput?.value.trim() || ""; 
+                                         rowColorClass = row.className || ""; 
+                                         foundRow = true; break; 
                                      }
-                                  }
-                                  if (currentProcessingHour > currentHour) break; // Ottimizzazione: siamo andati oltre l'ora cercata
-                             } // Fine ciclo righe
-
+                                  } if (currentProcessingHour > currentHour) break; 
+                             } 
 
                             if (foundRow) {
-                                 if (substituteName.startsWith('(')) { // Caso Compresenza
-                                     cellContent = `Coperto da Compresenza ${substituteName}`;
+                                 // Mappa la classe colore alla keyword
+                                 if (rowColorClass.includes('bg-yellow-50')) colorKeyword = '[GIALLO]';
+                                 else if (rowColorClass.includes('bg-blue-50')) colorKeyword = '[AZZURRO]';
+                                 else if (rowColorClass.includes('bg-orange-50')) colorKeyword = '[ARANCIONE]';
+                                 else if (rowColorClass.includes('bg-green-50')) colorKeyword = '[VERDE]';
+                                 else if (rowColorClass.includes('bg-red-50')) colorKeyword = '[ROSSO]';
+                                 else if (rowColorClass.includes('bg-purple-50')) colorKeyword = '[VIOLA]'; 
+                                 
+                                 if (substituteName.startsWith('(')) { // Compresenza
+                                     cellContent = `Compresenza ${substituteName}`; 
                                  } else if (substituteName === "NON TROVATO") {
                                      cellContent = "NON SOSTITUITO";
                                  } else {
-                                     cellContent = `SOSTITUITO DA: ${substituteName} (${substituteReason})`;
+                                     // FORMATO: Classe - Sostituto
+                                     cellContent = `${absentClassInfo} - ${substituteName}`; 
                                  }
                              } else {
-                                 // Se non troviamo la riga, potrebbe essere un bug o un caso limite
-                                 cellContent = "ASSENTE (Info Sostituzione Mancante)";
+                                 cellContent = "ASSENTE (Info Mancante)"; 
+                                 colorKeyword = '[ERRORE]';
                              }
 
-                        } else {
-                            // Era assente ma era a disposizione o aveva ora libera
-                            cellContent = "ASSENTE (D/Libero)";
-                        }
-                    } else {
-                        // Non è assente in quest'ora (es. fine permesso breve)
-                        cellContent = ""; // Cella vuota
-                    }
-                    // Aggiungi la cella alla riga (con escape per virgolette)
-                     rowData.push(`"${cellContent.replace(/"/g, '""')}"`);
-                } // Fine ciclo ore (colonne)
-                tsvData += rowData.join('\t') + '\n'; // Completa la riga del docente assente
-            }); // Fine ciclo docenti assenti
+                        } else { cellContent = ""; colorKeyword = '';} // Cella vuota per D/Libero
+                    } else { cellContent = ""; colorKeyword = '';} // Cella vuota se presente
+                    
+                    const finalCellContent = cellContent ? `${cellContent} ${colorKeyword}` : ""; 
+                    rowData.push(`"${finalCellContent.replace(/"/g, '""').trim()}"`); 
+                } tsvData += rowData.join('\t') + '\n'; 
+            }); 
+
+            // --- AGGIUNTA DELLA LEGENDA ---
+            tsvData += '\n\nLEGENDA COLORI:\n'; // Aggiunge spazio e titolo
+            tsvData += '[GIALLO]\tCompresenza Automatica\n';
+            tsvData += '[AZZURRO]\tDocente della Classe\n';
+            tsvData += '[ARANCIONE]\tStessa Materia\n';
+            tsvData += '[VERDE]\tDisponibilità Generica\n';
+            tsvData += '[ROSSO]\tNessun Sostituto Trovato\n';
+            tsvData += '[VIOLA]\tModifica Manuale / Forzatura\n';
+            // Aggiungi qui altre voci della legenda se necessario, usando lo stesso formato "[KEYWORD]\tSignificato\n"
 
 
-            // Copia negli appunti (stesso meccanismo di prima)
             try {
-                clipboardHelper.value = tsvData;
-                clipboardHelper.select();
-                document.execCommand('copy');
-                console.log('Tabella Docenti Assenti x Ore copiata negli appunti.');
+                clipboardHelper.value = tsvData; clipboardHelper.select(); document.execCommand('copy');
+                console.log('Tabella Assenti x Ore (con classe, nome, keyword colore) + Legenda copiata.');
 
-                const originalText = copyTableBtn.textContent;
-                copyTableBtn.textContent = 'Copiato!';
-                copyTableBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
-                copyTableBtn.classList.add('bg-gray-500');
+                const originalText = copyTableBtn.textContent; copyTableBtn.textContent = 'Copiato!';
+                copyTableBtn.classList.remove('bg-green-600', 'hover:bg-green-700'); copyTableBtn.classList.add('bg-gray-500');
                 setTimeout(() => {
                     copyTableBtn.textContent = originalText;
-                    copyTableBtn.classList.remove('bg-gray-500');
-                    copyTableBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                    copyTableBtn.classList.remove('bg-gray-500'); copyTableBtn.classList.add('bg-green-600', 'hover:bg-green-700');
                 }, 1500); 
 
             } catch (err) {
-                console.error('Errore durante la copia:', err);
-                 const originalText = copyTableBtn.textContent;
-                 copyTableBtn.textContent = 'Errore Copia';
+                console.error('Errore copia:', err);
+                 const originalText = copyTableBtn.textContent; copyTableBtn.textContent = 'Errore Copia';
                  setTimeout(() => { copyTableBtn.textContent = originalText; }, 2000);
             }
             clipboardHelper.blur();
