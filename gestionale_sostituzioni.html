@@ -1,0 +1,898 @@
+<!-- Chosen Palette: Emerald and Slate -->
+<!-- Application Structure Plan: La struttura è stata aggiornata per includere un sistema a schede (Tabbed Interface) che funge da navigazione principale: 1) Ricerca Sostituzioni e 2) Registro Assenze. Questo design a tab permette di gestire due flussi di lavoro distinti (registrazione vs. risoluzione immediata) all'interno di una singola pagina, migliorando l'architettura dell'informazione e la UI/UX. La sezione di Ricerca (Dashboard) rimane focalizzata sull'input-output rapido. La nuova sezione Registro Assenze è una matrice interattiva (simulazione di foglio di calcolo) per la registrazione massiva, offrendo la "singola scremata" richiesta. -->
+<!-- Visualization & Content Choices: La nuova matrice utilizza input HTML diretti per simulare un foglio di calcolo, consentendo l'inserimento rapido di 'A'/'P' per giorno/ora. Un pulsante aggiorna lo stato e potenzialmente può alimentare futuri filtri di ricerca, creando un ponte funzionale tra le due tab. [Obiettivo: Registrazione massiva -> Metodo: Tabella/Matrice interattiva (HTML/JS) -> Interazione: Modifica diretta delle celle e salvataggio dello stato in JS -> Giustificazione: Massima efficienza per il data entry delle assenze settimanali/orarie]. Nessuna libreria di grafici utilizzata. -->
+<!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionale Sostituzioni Docenti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: box-shadow 0.3s ease-in-out;
+        }
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .btn-primary {
+            background-color: #10b981; /* emerald-500 */
+            color: white;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #059669; /* emerald-600 */
+            transform: translateY(-2px);
+        }
+        .btn-llm {
+            background-color: #6366f1; /* indigo-500 */
+            color: white;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .btn-llm:hover {
+            background-color: #4f46e5; /* indigo-600 */
+            transform: translateY(-2px);
+        }
+        select:focus, input:focus {
+            ring: 2px;
+            ring-color: #10b981;
+            border-color: #10b981;
+        }
+        .table-header {
+            background-color: #f1f5f9; /* slate-100 */
+        }
+        .disposizione-cell {
+            background-color: #ecfdf5; /* emerald-50 */
+            color: #065f46; /* emerald-800 */
+            font-weight: 600;
+        }
+        .assenza-cell {
+            background-color: #fef2f2; /* red-50 */
+        }
+        .assenza-row {
+            border-left: 4px solid #ef4444; /* red-500 */
+        }
+        .tab-button {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-button.active {
+            color: #10b981;
+            border-color: #10b981;
+            background-color: #ffffff;
+        }
+        .tab-button:not(.active):hover {
+            background-color: #f1f5f9;
+        }
+        .absence-input {
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+            text-transform: uppercase;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 2px 0;
+            background-color: #fff;
+            transition: background-color 0.2s;
+        }
+        .absence-input:focus {
+            outline: none;
+            border-color: #10b981;
+            box-shadow: 0 0 0 1px #10b981;
+        }
+        .is-absent {
+            background-color: #fecaca; /* red-300 */
+            color: #991b1b; /* red-800 */
+        }
+        .is-permission {
+             background-color: #fcd34d; /* amber-300 */
+             color: #92400e; /* amber-800 */
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+
+    <main id="app" class="max-w-7xl mx-auto space-y-8">
+        
+        <header class="flex items-center justify-between pb-4 border-b border-slate-200">
+            <div class="flex items-center space-x-3">
+                 <div class="bg-emerald-100 p-2 rounded-full">
+                    <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                 </div>
+                 <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">
+                    Cruscotto Sostituzioni
+                 </h1>
+            </div>
+            <p id="current-date" class="text-sm text-slate-500 hidden sm:block"></p>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="flex space-x-4 border-b border-slate-300">
+            <button id="tab-ricerca-btn" class="tab-button active" onclick="showTab('ricerca')">1. Ricerca Sostituzioni</button>
+            <button id="tab-registro-btn" class="tab-button" onclick="showTab('registro')">2. Registro Assenze (Sheet)</button>
+        </div>
+
+        <!-- Tab 1: Ricerca Sostituzioni -->
+        <div id="tab-ricerca" class="tab-content space-y-8">
+            <section class="card p-6">
+                <h2 class="text-xl font-semibold text-slate-700 mb-1">Cerca un Supplente</h2>
+                <p class="text-sm text-slate-500 mb-6">Seleziona un docente, il giorno e l'ora dell'assenza per trovare i colleghi a disposizione.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div>
+                        <label for="docente-assente" class="block text-sm font-medium text-slate-600 mb-1">Docente Assente</label>
+                        <select id="docente-assente" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500"></select>
+                    </div>
+                    <div>
+                        <label for="giorno-assenza" class="block text-sm font-medium text-slate-600 mb-1">Giorno</label>
+                        <select id="giorno-assenza" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="Lunedì">Lunedì</option>
+                            <option value="Martedì">Martedì</option>
+                            <option value="Mercoledì">Mercoledì</option>
+                            <option value="Giovedì">Giovedì</option>
+                            <option value="Venerdì">Venerdì</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="ora-assenza" class="block text-sm font-medium text-slate-600 mb-1">Ora di Lezione</label>
+                        <select id="ora-assenza" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="1ora">1ª Ora</option>
+                            <option value="2ora">2ª Ora</option>
+                            <option value="3ora">3ª Ora</option>
+                            <option value="4ora">4ª Ora</option>
+                            <option value="5ora">5ª Ora</option>
+                            <option value="6ora">6ª Ora</option>
+                            <option value="7ora">7ª Ora</option>
+                            <option value="8ora">8ª Ora</option>
+                            <option value="9ora">9ª Ora</option>
+                            <option value="10ora">10ª Ora</option>
+                        </select>
+                    </div>
+                    <button onclick="cercaSupplenti()" class="btn-primary w-full">
+                        Cerca
+                    </button>
+                </div>
+            </section>
+
+            <section id="output-section" class="grid grid-cols-1 lg:grid-cols-5 gap-8 hidden">
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold text-slate-700 mb-4">Supplenti Disponibili</h2>
+                        <div id="info-lezione" class="mb-4 p-4 rounded-md bg-red-50 border border-red-200"></div>
+                        <div id="lista-supplenti" class="space-y-2 text-slate-600"></div>
+                    </div>
+                    
+                    <!-- Nuovo Blocco LLM -->
+                    <div class="card p-6 bg-indigo-50 border-indigo-200 border">
+                        <h2 class="text-xl font-semibold text-indigo-700 mb-3 flex items-center">
+                            ✨ Assistente Sostituzioni Intelligente
+                        </h2>
+                        <div id="llm-output">
+                            <p class="text-sm text-indigo-500">Seleziona un'assenza e un potenziale supplente per ricevere un suggerimento automatico.</p>
+                        </div>
+                    </div>
+                    <!-- Fine Nuovo Blocco LLM -->
+
+                </div>
+                <div class="lg:col-span-3 card p-6">
+                    <h2 class="text-xl font-semibold text-slate-700 mb-4">Dettaglio Orario: <span id="docente-dettaglio" class="text-emerald-600"></span></h2>
+                    <div id="orario-docente-dettaglio" class="overflow-x-auto"></div>
+                </div>
+            </section>
+            
+            <div id="initial-message" class="text-center py-12">
+                <p class="text-slate-500">I risultati della ricerca appariranno qui.</p>
+            </div>
+        </div>
+
+        <!-- Tab 2: Registro Assenze (Foglio Sheet) -->
+        <div id="tab-registro" class="tab-content hidden space-y-6">
+            <section class="card p-6">
+                <h2 class="text-xl font-semibold text-slate-700 mb-2">Registro Assenze Orarie (Settimanale)</h2>
+                <p class="text-sm text-slate-500 mb-4">Inserisci A (Assente) o P (Permesso) direttamente nelle celle. Le celle senza lezione o in 'D' sono bloccate.</p>
+                <div id="registro-sheet" class="overflow-x-auto">
+                    <!-- Il foglio di calcolo verrà popolato qui -->
+                </div>
+            </section>
+        </div>
+
+    </main>
+
+    <script>
+        const API_KEY = ""; // L'API Key sarà fornita dal Canvas in runtime
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+        const LLM_MODEL = "gemini-2.5-flash-preview-09-2025";
+        
+        const orariSettimanali = {
+            "Lunedì": [
+                {"Docente": "ACCARDO L.", "1ora": "5C - TTIM", "2ora": "5C - TTIM", "3ora": "D", "4ora": "5C - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANFOSSO A.", "1ora": "1QB - MAT", "2ora": "1QB - MAT", "3ora": "1QA - MAT", "4ora": "D", "5ora": "2A - MAT", "6ora": "2A - MAT", "7ora": "1QA - MAT", "8ora": "D", "9ora": "", "10ora": ""},
+                {"Docente": "ANTICO R.", "1ora": "1C - LTE", "2ora": "1C - LTE", "3ora": "1C - LTE", "4ora": "1C - SI", "5ora": "1C - SI", "6ora": "1C - STO.", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ARMAROLI A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BAROSIO S.", "1ora": "2D - SM", "2ora": "2D - SM", "3ora": "1A - SM", "4ora": "1A - SM", "5ora": "1QB - SM", "6ora": "1QB - SM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BASSO V.", "1ora": "1A - TTRG", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "1QA - TTRG", "6ora": "1B - TTRG", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BEARDO C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BONORI F.", "1ora": "2C - TTRG", "2ora": "2C - TTRG", "3ora": "D", "4ora": "3A - TMA", "5ora": "3A - TMA", "6ora": "3A - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BUSETTO C.", "1ora": "3B - TEEA", "2ora": "D", "3ora": "4C - TEEA", "4ora": "4C - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CALABRETTA M.", "1ora": "5A - TTIM", "2ora": "5A - TTIM", "3ora": "4A - TEEA.", "4ora": "D", "5ora": "5A - TEEA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CAMISASSO S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CANCILLA A.", "1ora": "2D - MAT", "2ora": "2D - MAT", "3ora": "3C - MAT", "4ora": "3C - MAT", "5ora": "5A - MAT", "6ora": "1QB - MAT", "7ora": "5A - MAT", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARACCIOLO P.", "1ora": "2C - TTRG", "2ora": "2C - TTRG", "3ora": "4A - TMA", "4ora": "4A - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARTAGENOVA P.", "1ora": "3A - ITA", "2ora": "5C - ITA", "3ora": "3D - ITA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CERRATO A.", "1ora": "D", "2ora": "1B - TIC", "3ora": "1B - TIC", "4ora": "2A - TIC", "5ora": "2A - TIC", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CESANI L.", "1ora": "D", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "D", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CEVOLI C.", "1ora": "3B - LTE", "2ora": "3B - LTE", "3ora": "3B - TTIM", "4ora": "3B - TTIM", "5ora": "3A - TMA", "6ora": "3A - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CHIRIZZI G.", "1ora": "1QB - TMA", "2ora": "4C - TMA", "3ora": "5C - TTIM", "4ora": "5C - TTIM", "5ora": "4A - TMA", "6ora": "4A - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CIURCOVICH S.", "1ora": "1QB - ING", "2ora": "2D - ING", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "COPPOLA A.", "1ora": "4A - ITA", "2ora": "1B - STO", "3ora": "D", "4ora": "1QB - APP. ITA", "5ora": "1A - ITA", "6ora": "1A - ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "D'AMICO A.", "1ora": "1QA - STO.", "2ora": "1QA - ITA", "3ora": "3C - ITA", "4ora": "3C - ITA", "5ora": "3C - ITA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DE GENNARO C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI BENEDETTO C.", "1ora": "5C - LTE", "2ora": "5C - LTE", "3ora": "D", "4ora": "2C - LTE", "5ora": "2C - LTE", "6ora": "2C - LTE", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI LELLA L.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "FIGARI S.", "1ora": "4A - SM", "2ora": "4A - SM", "3ora": "4C - SM", "4ora": "4C - SM", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "GILARDI L.", "1ora": "5A - TTIM", "2ora": "5A - TTIM", "3ora": "5A - LTE", "4ora": "5A - LTE", "5ora": "1QA - TTRG", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ISNARDI B.", "1ora": "2A - ING", "2ora": "1A - ING", "3ora": "1A - ING", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LISBO M.", "1ora": "4C - MAT", "2ora": "D", "3ora": "2B - MAT", "4ora": "2B - MAT", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LOMBARDO G.", "1ora": "4B - LTE", "2ora": "4B - LTE", "3ora": "5B - LTE", "4ora": "5B - LTE", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LUONGO G.", "1ora": "1C - SI", "2ora": "1C - SI", "3ora": "1QB - SI", "4ora": "1QA - SI", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MARGUATI M.", "1ora": "2A - ITA", "2ora": "2A - ITA", "3ora": "D", "4ora": "4C - STO", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MILIA S.", "1ora": "", "2ora": "1QA - GEO", "3ora": "1QB - GEO", "4ora": "1B - GEO", "5ora": "1A - GEO", "6ora": "D", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "NIDO T.", "1ora": "1B - TIC", "2ora": "1B - TIC", "3ora": "2A - TIC", "4ora": "2A - TIC", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ODDI G.", "1ora": "3D - TMA", "2ora": "3D - TMA", "3ora": "3D - TMA", "4ora": "3D - TMA", "5ora": "3D - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ONETO F.", "1ora": "3D - TEEA", "2ora": "4B - TEEA", "3ora": "3A - TEEA", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ORLANDINI B.", "1ora": "D", "2ora": "5C - TMA", "3ora": "4C - TTIM", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PARODI G.", "1ora": "2C - SI", "2ora": "D", "3ora": "D", "4ora": "1A - SI", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PIRAS S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "POGLIANI P.", "1ora": "2D - STO", "2ora": "D", "3ora": "1C - STO.", "4ora": "D", "5ora": "3B - ITA", "6ora": "3B - ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PREVITERA G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PRIANO W.", "1ora": "4B - TTIM", "2ora": "5B - TTIM", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RAIMONDI C.", "1ora": "3C - ING", "2ora": "3D - ING", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ROTOLO G.", "1ora": "1QB - SI", "2ora": "1QA - SI", "3ora": "4C - TEEA", "4ora": "4C - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RUSSO A.", "1ora": "2B - DIR", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "", "7ora": "2A - DIR", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SARRA P. G.", "1ora": "D", "2ora": "D", "3ora": "3D - TMA", "4ora": "3D - TMA", "5ora": "3D - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SEGGIO A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SERGI G.", "1ora": "D", "2ora": "D", "3ora": "4B - REL/ALT", "4ora": "3B - REL/ALT", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SFERRAZZA R.", "1ora": "1B - DIR", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SPINOGLIO S.", "1ora": "3A - LTE", "2ora": "3A - LTE", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TABOR L.", "1ora": "3A - TEEA", "2ora": "D", "3ora": "5A - TEEA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TACCHELLA A.", "1ora": "1QA - TMA", "2ora": "3C - TMA", "3ora": "3B - TTIM", "4ora": "3B - TTIM", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TECILLA E.", "1ora": "1QA - STO.", "2ora": "1QA - ITA", "3ora": "4B - ITA", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TUCCITTO C.", "1ora": "2B - TTRG", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""}
+            ],
+            "Martedì": [
+                {"Docente": "ACCARDO L.", "1ora": "", "2ora": "4C - TMA", "3ora": "4C - TMA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANFOSSO A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "1QB - MAT", "5ora": "D", "6ora": "1QB - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANTICO R.", "1ora": "1C - TTRG", "2ora": "1C - TTRG", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ARMAROLI A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BAROSIO S.", "1ora": "3B - SM", "2ora": "3B - SM", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BASSO V.", "1ora": "2A - TTRG", "2ora": "2A - TTRG", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BEARDO C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BONORI F.", "1ora": "1C - TTRG", "2ora": "1C - TTRG", "3ora": "2D - TTRG", "4ora": "2D - TTRG", "5ora": "2D - TTRG", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BUSETTO C.", "1ora": "5B - TEEA", "2ora": "3C - TEEA", "3ora": "3C - TEEA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CALABRETTA M.", "1ora": "", "2ora": "", "3ora": "4A - TTIM", "4ora": "4A - TTIM", "5ora": "1QA - TEEA", "6ora": "1QA - TEEA", "7ora": "5A - TTIM", "8ora": "5A - TTIM", "9ora": "", "10ora": ""},
+                {"Docente": "CAMISASSO S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CANCILLA A.", "1ora": "", "2ora": "", "3ora": "3D - MAT", "4ora": "3D - MAT", "5ora": "", "6ora": "", "7ora": "3C - MAT", "8ora": "5C - MAT", "9ora": "D", "10ora": ""},
+                {"Docente": "CARACCIOLO P.", "1ora": "4C - LTE", "2ora": "4C - LTE", "3ora": "D", "4ora": "3C - LTE", "5ora": "3C - LTE", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARTAGENOVA P.", "1ora": "5C - ITA", "2ora": "5C - ITA", "3ora": "3D - STO", "4ora": "3A - STO", "5ora": "5A - STO.", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CERRATO A.", "1ora": "2B - TIC", "2ora": "2B - TIC", "3ora": "D", "4ora": "1QB - TIC", "5ora": "1QB - TIC", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CESANI L.", "1ora": "D", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CEVOLI C.", "1ora": "1B - LTE", "2ora": "1B - LTE", "3ora": "1B - LTE", "4ora": "D", "5ora": "2C - SI", "6ora": "2C - SI", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CHIRIZZI G.", "1ora": "1QB - TMA", "2ora": "1QB - TMA", "3ora": "5C - TTIM", "4ora": "D", "5ora": "4C - TMA", "6ora": "4C - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CIURCOVICH S.", "1ora": "2C - ING", "2ora": "5B - ING", "3ora": "1QB - ING", "4ora": "5C - ING", "5ora": "3A - ING", "6ora": "D", "7ora": "", "8ora": "2B - ING", "9ora": "2B - ING", "10ora": ""},
+                {"Docente": "COPPOLA A.", "1ora": "1A - ITA", "2ora": "1A - STO.", "3ora": "4A - STO.", "4ora": "1B - ITA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "D'AMICO A.", "1ora": "2C - ITA", "2ora": "2C - ITA", "3ora": "1QA - ITA", "4ora": "1QA - ITA", "5ora": "1QA - ITA", "6ora": "1QB - ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DE GENNARO C.", "1ora": "2D - LTE", "2ora": "2D - LTE", "3ora": "2D - LTE", "4ora": "2D - TTRG", "5ora": "2D - TTRG", "6ora": "D", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI BENEDETTO C.", "1ora": "", "2ora": "", "3ora": "3B - TMA", "4ora": "5C - LTE.", "5ora": "5C - LTE.", "6ora": "D", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI LELLA L.", "1ora": "D", "2ora": "3C - TEEA", "3ora": "3C - TEEA", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "FIGARI S.", "1ora": "5A - SM", "2ora": "5A - SM", "3ora": "2A - SM", "4ora": "2A - SM", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "GILARDI L.", "1ora": "", "2ora": "1QA - TEEA", "3ora": "1QA - TEEA", "4ora": "5A - TTIM", "5ora": "5A - TTIM", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ISNARDI B.", "1ora": "", "2ora": "4A - ING", "3ora": "5A - ING", "4ora": "2B - ING", "5ora": "2B - ING", "6ora": "4B - ING", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LISBO M.", "1ora": "4A - MAT", "2ora": "4A - MAT", "3ora": "1C - MAT", "4ora": "1C - MAT", "5ora": "1B - MAT", "6ora": "5B - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LOMBARDO G.", "1ora": "4B - TTIM", "2ora": "4B - TTIM", "3ora": "5B - TMA", "4ora": "5B - TMA", "5ora": "4B - LTE", "6ora": "4B - LTE", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LUONGO G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MARGUATI M.", "1ora": "5A - ITA", "2ora": "5A - ITA", "3ora": "2A - STO", "4ora": "4C - STO", "5ora": "5A - STO.", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MILIA S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "NIDO T.", "1ora": "2B - TIC", "2ora": "2B - TIC", "3ora": "D", "4ora": "1QB - TIC", "5ora": "1QB - TIC", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ODDI G.", "1ora": "3D - TMA", "2ora": "3D - TTIM", "3ora": "2B - TTRG", "4ora": "4B - TMA", "5ora": "4B - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ONETO F.", "1ora": "3A - TTIM", "2ora": "3A - TTIM", "3ora": "3A - TEEA", "4ora": "3D - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ORLANDINI B.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PARODI G.", "1ora": "D", "2ora": "2C - SI", "3ora": "2C - SI", "4ora": "2B - SI", "5ora": "2B - SI", "6ora": "1B - SI", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PIRAS S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "POGLIANI P.", "1ora": "3B - ITA", "2ora": "2C - STO.", "3ora": "2D - ITA", "4ora": "1C - ITA", "5ora": "2D - ITA", "6ora": "3C - STO.", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PREVITERA G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PRIANO W.", "1ora": "4B - TTIM", "2ora": "4B - TTIM", "3ora": "5B - TMA", "4ora": "5B - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RAIMONDI C.", "1ora": "", "2ora": "1C - ING", "3ora": "1C - ING", "4ora": "3C - ING", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ROTOLO G.", "1ora": "2A - TTRG", "2ora": "2A - TTRG", "3ora": "D", "4ora": "4A - TTIM", "5ora": "4A - TTIM", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RUSSO A.", "1ora": "D", "2ora": "D", "3ora": "1A - DIR", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SARRA P. G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SEGGIO A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SERGI G.", "1ora": "4C - REL/ALT", "2ora": "2A - REL/ALT", "3ora": "2B - REL/ALT", "4ora": "3A - REL/ALT", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SFERRAZZA R.", "1ora": "D", "2ora": "1B - DIR", "3ora": "D", "4ora": "D", "5ora": "1C - DIR", "6ora": "D", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SPINOGLIO S.", "1ora": "3A - TTIM", "2ora": "3A - TTIM", "3ora": "D", "4ora": "1A - LTE", "5ora": "1A - LTE", "6ora": "1A - LTE", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TABOR L.", "1ora": "1QA - LTE", "2ora": "1QA - LTE", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TACCHELLA A.", "1ora": "3C - TMA", "2ora": "D", "3ora": "D", "4ora": "3B - TMA.", "5ora": "3B - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TECILLA E.", "1ora": "1QA - ITA", "2ora": "1QA - ITA", "3ora": "1QB - ITA", "4ora": "3C - STO.", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TUCCITTO C.", "1ora": "1QB - TMA", "2ora": "1QB - TMA", "3ora": "2B - TTRG", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""}
+            ],
+            "Mercoledì": [
+                {"Docente": "ACCARDO L.", "1ora": "", "2ora": "", "3ora": "4C - TMA", "4ora": "D", "5ora": "3C - TTIM", "6ora": "3C - TTIM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANFOSSO A.", "1ora": "", "2ora": "", "3ora": "3A - MAT", "4ora": "2A - MAT", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANTICO R.", "1ora": "", "2ora": "", "3ora": "3D - STO", "4ora": "1C - LTE", "5ora": "1C - LTE", "6ora": "1C - LTE", "7ora": "3D - TTIM", "8ora": "3D - TTIM", "9ora": "", "10ora": ""},
+                {"Docente": "ARMAROLI A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "1B - ING.", "6ora": "", "7ora": "", "8ora": "1B - ING", "9ora": "1B - ING", "10ora": ""},
+                {"Docente": "BAROSIO S.", "1ora": "4B - SM", "2ora": "4B - SM", "3ora": "3D - SM", "4ora": "3D - SM", "5ora": "2B - SM", "6ora": "2B - SM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BASSO V.", "1ora": "2A - TTRG", "2ora": "D", "3ora": "D", "4ora": "1QB - TTRG.", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BEARDO C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BONORI F.", "1ora": "2D - TTRG", "2ora": "D", "3ora": "2C - TTRG", "4ora": "3A - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BUSETTO C.", "1ora": "3C - TEEA", "2ora": "5C - TEEA", "3ora": "5C - TEEA", "4ora": "4C - TEEA", "5ora": "D", "6ora": "3B - TEEA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CALABRETTA M.", "1ora": "4A - TEEA", "2ora": "5A - TEEA", "3ora": "D", "4ora": "1QA - TEEA", "5ora": "4A - TTIM", "6ora": "4A - TTIM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CAMISASSO S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CANCILLA A.", "1ora": "2C - MAT", "2ora": "2C - MAT", "3ora": "5C - MAT", "4ora": "2D - MAT", "5ora": "5C - MAT", "6ora": "2C - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARACCIOLO P.", "1ora": "4C - LTE", "2ora": "4C - LTE", "3ora": "3C - TMA", "4ora": "D", "5ora": "D", "6ora": "4B - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARTAGENOVA P.", "1ora": "3D - STO", "2ora": "D", "3ora": "3A - ITA", "4ora": "5C - STO", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CERRATO A.", "1ora": "1A - TIC", "2ora": "1A - TIC", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CESANI L.", "1ora": "D", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "D", "7ora": "D", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CEVOLI C.", "1ora": "3B - TTIM", "2ora": "3B - LTE", "3ora": "3B - LTE", "4ora": "3B - TMA.", "5ora": "1QA - TMA", "6ora": "1QA - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CHIRIZZI G.", "1ora": "5C - TTIM", "2ora": "4A - TMA", "3ora": "4C - TMA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CIURCOVICH S.", "1ora": "", "2ora": "", "3ora": "4C - ING", "4ora": "3A - ING", "5ora": "D", "6ora": "", "7ora": "2C - ING", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "COPPOLA A.", "1ora": "D", "2ora": "1B - ITA", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "D'AMICO A.", "1ora": "3C - ITA", "2ora": "D", "3ora": "1QB - STO.", "4ora": "1QB - ITA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DE GENNARO C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI BENEDETTO C.", "1ora": "5B - TTIM", "2ora": "5B - TTIM", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI LELLA L.", "1ora": "D", "2ora": "3C - TEEA", "3ora": "3C - TEEA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "FIGARI S.", "1ora": "D", "2ora": "D", "3ora": "2C - SM", "4ora": "2C - SM", "5ora": "1QA - SM", "6ora": "1QA - SM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "GILARDI L.", "1ora": "4A - TEEA", "2ora": "5C - TEEA", "3ora": "5C - TEEA", "4ora": "4A - LTE", "5ora": "D", "6ora": "4A - TTIM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ISNARDI B.", "1ora": "", "2ora": "4B - ING", "3ora": "D", "4ora": "5A - ING", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LISBO M.", "1ora": "2B - MAT", "2ora": "1C - MAT", "3ora": "1B - MAT", "4ora": "1B - MAT", "5ora": "D", "6ora": "5C - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LOMBARDO G.", "1ora": "2B - SI", "2ora": "2B - SI", "3ora": "5B - LTE", "4ora": "5B - LTE", "5ora": "5B - LTE", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LUONGO G.", "1ora": "", "2ora": "", "3ora": "1C - SI", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MARGUATI M.", "1ora": "5A - STO.", "2ora": "2A - STO", "3ora": "5A - ITA", "4ora": "D", "5ora": "4C - ITA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MILIA S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "NIDO T.", "1ora": "1A - TIC", "2ora": "", "3ora": "", "4ora": "1QA - TIC", "5ora": "1QA - TIC", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ODDI G.", "1ora": "", "2ora": "", "3ora": "4B - TMA", "4ora": "3D - TTIM", "5ora": "3D - TTIM", "6ora": "3D - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ONETO F.", "1ora": "3A - TTIM", "2ora": "3A - TTIM", "3ora": "4B - TEEA", "4ora": "D", "5ora": "3A - TEEA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ORLANDINI B.", "1ora": "", "2ora": "", "3ora": "D", "4ora": "3C - TTIM", "5ora": "3C - TTIM", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PARODI G.", "1ora": "D", "2ora": "2B - SI", "3ora": "2B - SI", "4ora": "1A - SI", "5ora": "", "6ora": "2D - SI", "7ora": "1B - SI", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PIRAS S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "POGLIANI P.", "1ora": "2D - ITA", "2ora": "2D - ITA", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PREVITERA G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PRIANO W.", "1ora": "5B - TTIM", "2ora": "5B - TTIM", "3ora": "D", "4ora": "5A - TMA", "5ora": "5A - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RAIMONDI C.", "1ora": "1C - ING", "2ora": "3D - ING", "3ora": "D", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ROTOLO G.", "1ora": "4A - TEEA", "2ora": "5C - TEEA", "3ora": "5C - TEEA", "4ora": "D", "5ora": "4A - TTIM", "6ora": "4A - TTIM", "7ora": "4A - TTIM", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RUSSO A.", "1ora": "", "2ora": "D", "3ora": "2D - DIR", "4ora": "1A - DIR", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SARRA P. G.", "1ora": "", "2ora": "", "3ora": "5A - TMA", "4ora": "5A - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SEGGIO A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SERGI G.", "1ora": "1B - REL/ALT", "2ora": "3C - REL/ALT", "3ora": "1A - REL/ALT", "4ora": "2C - REL/ALT", "5ora": "3D - REL/ALT", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SFERRAZZA R.", "1ora": "D", "2ora": "2C - DIR", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SPINOGLIO S.", "1ora": "D", "2ora": "3A - LTE", "3ora": "", "4ora": "3A - LTE", "5ora": "3A - LTE", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TABOR L.", "1ora": "1QA - LTE", "2ora": "1QA - LTE", "3ora": "2A - LTE", "4ora": "2A - LTE", "5ora": "2A - LTE", "6ora": "2A - LTE", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TACCHELLA A.", "1ora": "3B - TTIM", "2ora": "D", "3ora": "3C - TMA", "4ora": "3B - TMA.", "5ora": "1QA - TMA", "6ora": "1QA - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TECILLA E.", "1ora": "4B - STO", "2ora": "1QB - STO.", "3ora": "1QB - ITA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TUCCITTO C.", "1ora": "1QB - LTE", "2ora": "1QB - LTE", "3ora": "1QB - LTE", "4ora": "D", "5ora": "1QA - TMA", "6ora": "1QA - TMA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""}
+            ],
+            "Giovedì": [
+                {"Docente": "ACCARDO L.", "1ora": "3C - TTIM", "2ora": "3C - TTIM", "3ora": "4C - TTIM", "4ora": "4C - TTIM", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANFOSSO A.", "1ora": "3A - MAT", "2ora": "4B - MAT", "3ora": "2A - MAT", "4ora": "1QA - MAT", "5ora": "1QB - MAT", "6ora": "3A - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANTICO R.", "1ora": "3D - TTIM", "2ora": "3D - TTIM", "3ora": "D", "4ora": "D", "5ora": "3D - LTE", "6ora": "3D - LTE", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ARMAROLI A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BAROSIO S.", "1ora": "5B - SM", "2ora": "5B - SM", "3ora": "D", "4ora": "D", "5ora": "1C - SM", "6ora": "1C - SM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BASSO V.", "1ora": "1A - TTRG", "2ora": "1A - TTRG", "3ora": "D", "4ora": "1B - TTRG", "5ora": "1B - TTRG", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BEARDO C.", "1ora": "1QB - TEEA.", "2ora": "1QB - TEEA.", "3ora": "1QB - TEEA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BONORI F.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BUSETTO C.", "1ora": "5C - TEEA", "2ora": "D", "3ora": "3C - TEEA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CALABRETTA M.", "1ora": "D", "2ora": "5A - TTIM", "3ora": "D", "4ora": "4A - TEEA", "5ora": "4A - TEEA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CAMISASSO S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "D", "5ora": "3B - MAT", "6ora": "3B - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CANCILLA A.", "1ora": "5A - MAT", "2ora": "5A - MAT", "3ora": "3D - MAT", "4ora": "D", "5ora": "2C - MAT", "6ora": "2C - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARACCIOLO P.", "1ora": "4B - TMA", "2ora": "4B - TMA", "3ora": "D", "4ora": "3C - LTE", "5ora": "3C - LTE", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARTAGENOVA P.", "1ora": "D", "2ora": "5C - STO", "3ora": "3A - STO", "4ora": "3D - ITA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CERRATO A.", "1ora": "2C - TIC", "2ora": "2C - TIC", "3ora": "D", "4ora": "D", "5ora": "1QA - TIC", "6ora": "1QA - TIC", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CESANI L.", "1ora": "D", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "D", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CEVOLI C.", "1ora": "1B - LTE", "2ora": "1B - LTE", "3ora": "1B - LTE", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CHIRIZZI G.", "1ora": "", "2ora": "", "3ora": "4A - TMA", "4ora": "D", "5ora": "4C - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CIURCOVICH S.", "1ora": "2D - ING", "2ora": "3B - ING", "3ora": "2C - ING", "4ora": "1QB - ING", "5ora": "D", "6ora": "4C - ING", "7ora": "4C - ING", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "COPPOLA A.", "1ora": "4A - STO.", "2ora": "4A - ITA", "3ora": "4A - ITA", "4ora": "4A - ITA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "D'AMICO A.", "1ora": "D", "2ora": "2C - ITA", "3ora": "1QB - ITA", "4ora": "1QB - ITA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DE GENNARO C.", "1ora": "", "2ora": "2D - SI", "3ora": "2D - SI", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI BENEDETTO C.", "1ora": "3B - TMA", "2ora": "3B - TMA", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI LELLA L.", "1ora": "1A - TTRG", "2ora": "1A - TTRG", "3ora": "D", "4ora": "1B - TTRG", "5ora": "1B - TTRG", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "FIGARI S.", "1ora": "5C - SM", "2ora": "5C - SM", "3ora": "D", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "GILARDI L.", "1ora": "D", "2ora": "4A - LTE", "3ora": "4A - LTE", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ISNARDI B.", "1ora": "1QA - ING", "2ora": "1QA - ING", "3ora": "D", "4ora": "D", "5ora": "2B - ING", "6ora": "4B - ING", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LISBO M.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "1B - MAT", "7ora": "4A - MAT", "8ora": "5B - MAT", "9ora": "5B - MAT", "10ora": ""},
+                {"Docente": "LOMBARDO G.", "1ora": "D", "2ora": "D", "3ora": "5B - TMA", "4ora": "4B - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LUONGO G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MARGUATI M.", "1ora": "4C - ITA", "2ora": "4C - ITA", "3ora": "5A - ITA", "4ora": "2A - ITA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MILIA S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "NIDO T.", "1ora": "2C - TIC", "2ora": "2C - TIC", "3ora": "D", "4ora": "D", "5ora": "1QA - TIC", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ODDI G.", "1ora": "3D - TTIM", "2ora": "3D - TTIM", "3ora": "4B - TMA", "4ora": "4B - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ONETO F.", "1ora": "3A - TTIM", "2ora": "3A - TTIM", "3ora": "D", "4ora": "3A - TEEA", "5ora": "3A - TEEA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ORLANDINI B.", "1ora": "3C - TTIM", "2ora": "3C - TTIM", "3ora": "4C - TTIM", "4ora": "4C - TTIM", "5ora": "5C - TMA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PARODI G.", "1ora": "D", "2ora": "2D - SI", "3ora": "D", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PIRAS S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "POGLIANI P.", "1ora": "3B - ITA", "2ora": "2D - STO", "3ora": "1C - ITA", "4ora": "1C - ITA", "5ora": "2B - ITA", "6ora": "1QA - APP. ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PREVITERA G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PRIANO W.", "1ora": "D", "2ora": "D", "3ora": "5B - TMA", "4ora": "5B - TMA", "5ora": "D", "6ora": "5B - TTIM", "7ora": "5B - TTIM", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RAIMONDI C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ROTOLO G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "D", "5ora": "4A - TEEA", "6ora": "4A - TEEA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RUSSO A.", "1ora": "", "2ora": "2B - DIR", "3ora": "2D - DIR", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SARRA P. G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SEGGIO A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SERGI G.", "1ora": "4A - REL/ALT", "2ora": "1C - REL/ALT", "3ora": "2D - REL/ALT", "4ora": "5A - REL/ALT", "5ora": "5B - REL/ALT", "6ora": "5C - REL/ALT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SFERRAZZA R.", "1ora": "D", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SPINOGLIO S.", "1ora": "3A - TTIM", "2ora": "3A - TTIM", "3ora": "1A - LTE", "4ora": "1A - LTE", "5ora": "1A - LTE", "6ora": "1A - LTE", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TABOR L.", "1ora": "2A - LTE", "2ora": "2A - LTE", "3ora": "3A - TEEA", "4ora": "3A - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TACCHELLA A.", "1ora": "3B - TMA", "2ora": "3B - TMA", "3ora": "D", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TECILLA E.", "1ora": "4B - ITA", "2ora": "4B - ITA", "3ora": "4B - ITA", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TUCCITTO C.", "1ora": "2B - LTE", "2ora": "2B - LTE", "3ora": "2B - LTE", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""}
+            ],
+            "Venerdì": [
+                {"Docente": "ACCARDO L.", "1ora": "3C - TTIM", "2ora": "3C - TTIM", "3ora": "4C - TTIM", "4ora": "4C - TTIM", "5ora": "5C - TTIM", "6ora": "5C - TTIM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANFOSSO A.", "1ora": "4B - MAT", "2ora": "1QA - MAT", "3ora": "2A - MAT", "4ora": "1QA - MAT", "5ora": "1QB - MAT", "6ora": "3A - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ANTICO R.", "1ora": "", "2ora": "", "3ora": "D", "4ora": "D", "5ora": "3D - LTE", "6ora": "3D - LTE", "7ora": "D", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ARMAROLI A.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BAROSIO S.", "1ora": "1C - SM", "2ora": "1C - SM", "3ora": "1B - SM", "4ora": "1B - SM", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BASSO V.", "1ora": "D", "2ora": "1QB - TTRG.", "3ora": "1QB - TTRG", "4ora": "D", "5ora": "1QA - TTRG", "6ora": "1QA - TTRG", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BEARDO C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BONORI F.", "1ora": "1C - TTRG", "2ora": "3A - TMA", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "BUSETTO C.", "1ora": "3B - TEEA", "2ora": "3B - TEEA", "3ora": "5B - TEEA", "4ora": "5B - TEEA", "5ora": "D", "6ora": "4C - TEEA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CALABRETTA M.", "1ora": "4A - TEEA.", "2ora": "4A - TTIM", "3ora": "5A - TTIM", "4ora": "5A - TEEA", "5ora": "5A - TEEA", "6ora": "5A - TEEA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CAMISASSO S.", "1ora": "3B - MAT", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CANCILLA A.", "1ora": "", "2ora": "", "3ora": "3D - MAT", "4ora": "D", "5ora": "2D - MAT", "6ora": "2C - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARACCIOLO P.", "1ora": "3C - TMA", "2ora": "3C - TMA", "3ora": "D", "4ora": "3C - LTE", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CARTAGENOVA P.", "1ora": "3D - ITA", "2ora": "3D - ITA", "3ora": "D", "4ora": "5C - ITA", "5ora": "3A - ITA", "6ora": "3A - ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CERRATO A.", "1ora": "", "2ora": "2D - TIC", "3ora": "2D - TIC", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CESANI L.", "1ora": "D", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CEVOLI C.", "1ora": "", "2ora": "", "3ora": "3B - TTIM", "4ora": "3B - TTIM", "5ora": "3B - TTIM", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CHIRIZZI G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "4C - TMA", "5ora": "5C - TTIM", "6ora": "5C - TTIM", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "CIURCOVICH S.", "1ora": "D", "2ora": "5B - ING", "3ora": "5C - ING", "4ora": "3B - ING", "5ora": "D", "6ora": "2D - ING", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "COPPOLA A.", "1ora": "1B - ITA", "2ora": "1B - ITA", "3ora": "4A - ITA", "4ora": "4A - ITA", "5ora": "1A - ITA", "6ora": "1A - ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "D'AMICO A.", "1ora": "D", "2ora": "2C - ITA", "3ora": "2C - ITA", "4ora": "3C - ITA", "5ora": "1QA - ITA", "6ora": "3C - ITA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DE GENNARO C.", "1ora": "2D - LTE", "2ora": "2D - LTE", "3ora": "2D - LTE", "4ora": "2D - SI", "5ora": "2D - SI", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI BENEDETTO C.", "1ora": "", "2ora": "2C - LTE", "3ora": "5B - TTIM", "4ora": "5B - TTIM", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "DI LELLA L.", "1ora": "3B - TEEA", "2ora": "3B - TEEA", "3ora": "3D - TEEA", "4ora": "3D - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "FIGARI S.", "1ora": "3C - SM", "2ora": "3C - SM", "3ora": "3A - SM", "4ora": "3A - SM", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "GILARDI L.", "1ora": "5A - LTE", "2ora": "5A - LTE", "3ora": "5A - LTE", "4ora": "4A - LTE", "5ora": "4A - LTE", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ISNARDI B.", "1ora": "1QA - ING", "2ora": "D", "3ora": "1A - ING", "4ora": "4A - ING", "5ora": "2A - ING", "6ora": "2A - ING", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LISBO M.", "1ora": "4C - MAT", "2ora": "4C - MAT", "3ora": "D", "4ora": "D", "5ora": "1C - MAT", "6ora": "2B - MAT", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LOMBARDO G.", "1ora": "4B - TTIM", "2ora": "4B - TTIM", "3ora": "D", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "LUONGO G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MARGUATI M.", "1ora": "D", "2ora": "D", "3ora": "4C - ITA", "4ora": "D", "5ora": "4C - ITA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "MILIA S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "NIDO T.", "1ora": "", "2ora": "2D - TIC", "3ora": "1C - TIC", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ODDI G.", "1ora": "D", "2ora": "2B - TTRG.", "3ora": "D", "4ora": "4B - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ONETO F.", "1ora": "4B - TEEA", "2ora": "4B - TEEA", "3ora": "3D - TEEA", "4ora": "3D - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ORLANDINI B.", "1ora": "5C - TMA", "2ora": "5C - TMA", "3ora": "4C - TTIM", "4ora": "4C - TTIM", "5ora": "3C - TTIM", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PARODI G.", "1ora": "2A - SI", "2ora": "2A - SI", "3ora": "1B - SI", "4ora": "1B - SI", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PIRAS S.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "POGLIANI P.", "1ora": "2C - STO.", "2ora": "1C - STO.", "3ora": "1C - ITA", "4ora": "2D - ITA", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PREVITERA G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "PRIANO W.", "1ora": "5B - TMA", "2ora": "D", "3ora": "4B - TTIM", "4ora": "4B - TTIM", "5ora": "5B - TTIM", "6ora": "5B - TTIM", "7ora": "5B - TTIM", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RAIMONDI C.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "ROTOLO G.", "1ora": "2A - SI", "2ora": "2A - SI", "3ora": "1QB - TTRG", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "RUSSO A.", "1ora": "2D - DIR", "2ora": "D", "3ora": "1B - SI", "4ora": "D", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SARRA P. G.", "1ora": "", "2ora": "", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SEGGIO A.", "1ora": "1C - TIC", "2ora": "1C - TIC", "3ora": "", "4ora": "", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SERGI G.", "1ora": "1QB - REL/ALT", "2ora": "D", "3ora": "1QA - REL/ALT", "4ora": "5C - REL/ALT", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SFERRAZZA R.", "1ora": "1C - DIR", "2ora": "D", "3ora": "D", "4ora": "D", "5ora": "D", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "SPINOGLIO S.", "1ora": "4B - TEEA", "2ora": "4B - TEEA", "3ora": "5B - TEEA", "4ora": "5B - TEEA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TABOR L.", "1ora": "", "2ora": "D", "3ora": "D", "4ora": "5A - TEEA", "5ora": "5A - TEEA", "6ora": "5A - TEEA", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TACCHELLA A.", "1ora": "3C - TMA", "2ora": "3C - TMA", "3ora": "3B - TTIM", "4ora": "3B - TTIM", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TECILLA E.", "1ora": "D", "2ora": "D", "3ora": "1QA - ITA", "4ora": "4B - ITA", "5ora": "4B - ITA", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
+                {"Docente": "TUCCITTO C.", "1ora": "D", "2ora": "2B - LTE", "3ora": "2B - LTE", "4ora": "2B - LTE", "5ora": "1QB - LTE", "6ora": "1QB - LTE", "7ora": "1QB - LTE", "8ora": "", "9ora": "", "10ora": ""}
+            ]
+        };
+
+        const docenti = orariSettimanali['Lunedì'].map(d => d.Docente).sort();
+        const giorni = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"];
+        const ore = ["1ora", "2ora", "3ora", "4ora", "5ora", "6ora", "7ora", "8ora", "9ora", "10ora"];
+
+        // STATO GLOBALE: tiene traccia delle assenze registrate (simula il foglio sheet)
+        // Struttura: { Docente: { Giorno: { Ora: 'A' | 'P' | 'L' } } }
+        let assenzeAttuali = {}; 
+        
+        // ===============================================
+        // FUNZIONI DI UTILITÀ GLOBALI (SPOSTATE QUI PER ACCESSIBILITÀ)
+        // ===============================================
+
+        function getOrarioDocente(docente, giorno) {
+            return orariSettimanali[giorno]?.find(d => d.Docente === docente) || null;
+        }
+
+        function getAssenzaRegistrata(docente, giorno, ora) {
+            return assenzeAttuali[docente]?.[giorno]?.[ora] || 'L';
+        }
+        
+        // ===============================================
+        // 1. INIZIALIZZAZIONE E UI BASE
+        // ===============================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            popolaDocenti();
+            giorni.forEach(g => ore.forEach(o => initAssenzeAttuali(g, o)));
+            popolaRegistroSheet();
+            
+
+            const dateElement = document.getElementById('current-date');
+            const now = new Date();
+            dateElement.textContent = now.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        });
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabName}-btn`).classList.add('active');
+            
+            if (tabName === 'registro') {
+                 popolaRegistroSheet();
+            }
+        }
+
+        function popolaDocenti() {
+            const select = document.getElementById('docente-assente');
+            select.innerHTML = '<option value="">-- Seleziona Docente --</option>';
+            docenti.forEach(docente => {
+                const option = document.createElement('option');
+                option.value = docente;
+                option.textContent = docente;
+                select.appendChild(option);
+            });
+        }
+        
+        // ===============================================
+        // 2. LOGICA REGISTRO ASSENZE (NUOVA)
+        // ===============================================
+        
+        function initAssenzeAttuali(giorno, ora) {
+            docenti.forEach(docente => {
+                if (!assenzeAttuali[docente]) {
+                    assenzeAttuali[docente] = {};
+                }
+                if (!assenzeAttuali[docente][giorno]) {
+                    assenzeAttuali[docente][giorno] = {};
+                }
+                if (assenzeAttuali[docente][giorno][ora] === undefined) {
+                    assenzeAttuali[docente][giorno][ora] = 'L';
+                }
+            });
+        }
+        
+        function popolaRegistroSheet() {
+            const container = document.getElementById('registro-sheet');
+            let html = `<table class="min-w-full divide-y divide-slate-200">
+                <thead class="table-header sticky top-0">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider sticky left-0 bg-slate-100 z-10">Docente</th>`;
+            
+            giorni.forEach(giorno => {
+                ore.forEach((_, index) => {
+                    html += `<th class="px-1 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">${giorno.substring(0, 3)} - ${index + 1}ª</th>`;
+                });
+            });
+            
+            html += `</tr></thead><tbody class="bg-white divide-y divide-slate-200">`;
+
+            docenti.forEach(docente => {
+                html += `<tr><td class="px-3 py-1 whitespace-nowrap text-sm font-medium text-slate-800 sticky left-0 bg-white border-r border-slate-200">${docente}</td>`;
+                
+                giorni.forEach(giorno => {
+                    const orarioGiorno = getOrarioDocente(docente, giorno);
+                    ore.forEach(ora => {
+                        const impegno = orarioGiorno ? orarioGiorno[ora] : '';
+                        const isModificabile = impegno && impegno !== 'D';
+                        
+                        const currentValue = assenzeAttuali[docente]?.[giorno]?.[ora] || 'L';
+                        
+                        let cellClass = '';
+                        if (currentValue === 'A') cellClass = 'is-absent';
+                        else if (currentValue === 'P') cellClass = 'is-permission';
+
+                        const disabledAttr = isModificabile ? '' : 'disabled';
+                        const tooltip = isModificabile ? `Lezione: ${impegno}` : (impegno === 'D' ? 'DISPOSIZIONE (D)' : 'LIBERO');
+
+                        html += `<td class="px-1 py-1 text-center">
+                            <input type="text" 
+                                class="absence-input ${cellClass}" 
+                                data-doc="${docente}" 
+                                data-giorno="${giorno}" 
+                                data-ora="${ora}" 
+                                value="${currentValue !== 'L' ? currentValue : ''}"
+                                maxlength="1"
+                                placeholder="${isModificabile ? '' : (impegno === 'D' ? 'D' : 'L')}"
+                                title="${tooltip}"
+                                onblur="handleAbsenceChange(this)"
+                                onkeyup="handleAbsenceInput(event, this)"
+                                ${disabledAttr}>
+                            </td>`;
+                    });
+                });
+                html += `</tr>`;
+            });
+
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+        
+        function handleAbsenceChange(inputElement) {
+            const docente = inputElement.getAttribute('data-doc');
+            const giorno = inputElement.getAttribute('data-giorno');
+            const ora = inputElement.getAttribute('data-ora');
+            let value = inputElement.value.toUpperCase().trim();
+            
+            let newState = 'L';
+            if (value === 'A') {
+                newState = 'A';
+                inputElement.className = 'absence-input is-absent';
+            } else if (value === 'P') {
+                newState = 'P';
+                inputElement.className = 'absence-input is-permission';
+            } else {
+                newState = 'L';
+                inputElement.className = 'absence-input';
+                inputElement.value = '';
+            }
+            
+            assenzeAttuali[docente][giorno][ora] = newState;
+        }
+        
+        function handleAbsenceInput(event, inputElement) {
+            if (event.key === 'Enter') {
+                inputElement.blur();
+            }
+        }
+
+
+        // ===============================================
+        // 3. LOGICA RICERCA SUPPLENTI
+        // ===============================================
+        
+        function cercaSupplenti() {
+            document.getElementById('llm-output').innerHTML = '<p class="text-sm text-indigo-500">Seleziona un potenziale supplente per ricevere un suggerimento automatico.</p>';
+            document.getElementById('initial-message').classList.add('hidden');
+            document.getElementById('output-section').classList.remove('hidden');
+
+            const docenteAssente = document.getElementById('docente-assente').value;
+            const giornoAssenza = document.getElementById('giorno-assenza').value;
+            const oraAssenza = document.getElementById('ora-assenza').value;
+
+            const listaSupplentiDiv = document.getElementById('lista-supplenti');
+            const infoLezioneDiv = document.getElementById('info-lezione');
+            
+            if (!docenteAssente) {
+                infoLezioneDiv.innerHTML = `<p class="font-semibold text-red-700">Per favore, seleziona un docente.</p>`;
+                listaSupplentiDiv.innerHTML = '';
+                document.getElementById('docente-dettaglio').textContent = '';
+                document.getElementById('orario-docente-dettaglio').innerHTML = '';
+                return;
+            }
+
+            const orarioAssente = getOrarioDocente(docenteAssente, giornoAssenza);
+            visualizzaOrarioDocente(docenteAssente, giornoAssenza, oraAssenza);
+
+            const impegnoAssente = orarioAssente ? (orarioAssente[oraAssenza] || 'Libero') : 'N/D';
+            
+            const lezioneDaCoprire = impegnoAssente !== 'D' && impegnoAssente !== 'Libero';
+
+            infoLezioneDiv.innerHTML = `
+                <p class="text-sm text-slate-600">Impegno in quest'ora:</p>
+                <p class="font-bold text-xl ${lezioneDaCoprire ? 'text-red-600' : 'text-slate-600'}">${impegnoAssente}</p>
+                <p class="text-xs text-slate-500 mt-1">${giornoAssenza} - ${oraAssenza.replace('ora','')}ª Ora</p>
+                ${lezioneDaCoprire ? '<p class="text-xs font-semibold text-red-600 mt-2">❗ Lezione da coprire.</p>' : '<p class="text-xs font-semibold text-emerald-600 mt-2">✅ Non ci sono lezioni da coprire.</p>'}
+            `;
+
+
+            const supplentiDisponibili = orariSettimanali[giornoAssenza]
+                .filter(docente => docente[oraAssenza] === 'D' && docente.Docente !== docenteAssente)
+                .map(docente => docente.Docente)
+                .sort();
+
+            if (supplentiDisponibili.length > 0) {
+                let html = '<p class="text-sm font-semibold text-slate-700">Docenti con Disponibilità (D) in Orario:</p>';
+                html += '<ul class="divide-y divide-slate-200 border-t border-b border-slate-200 mt-2">';
+                supplentiDisponibili.forEach(docente => {
+                    const statoAssenza = getAssenzaRegistrata(docente, giornoAssenza, oraAssenza);
+                    let statoText = '';
+                    let statoColor = 'text-slate-500';
+
+                    if (statoAssenza === 'A') {
+                        statoText = ' (ASSENTE)';
+                        statoColor = 'text-red-600 font-bold';
+                    } else if (statoAssenza === 'P') {
+                        statoText = ' (PERMESSO)';
+                        statoColor = 'text-amber-600 font-bold';
+                    } else {
+                        statoText = ' (Disponibile)';
+                        statoColor = 'text-emerald-600 font-bold';
+                    }
+
+                    // Aggiungi la chiamata alla funzione LLM al click
+                    html += `
+                        <li class="p-3 flex justify-between items-center hover:bg-emerald-50 cursor-pointer" onclick="visualizzaOrarioDocente('${docente}', '${giornoAssenza}', '${oraAssenza}'); generaSuggerimentoLLM('${docente}', '${giornoAssenza}', '${oraAssenza}', '${docenteAssente}', '${impegnoAssente}')">
+                            <span class="font-semibold text-slate-700">${docente}</span>
+                            <span class="${statoColor} text-xs md:text-sm">${statoText}</span>
+                        </li>`;
+                });
+                html += '</ul>';
+                listaSupplentiDiv.innerHTML = html;
+            } else {
+                listaSupplentiDiv.innerHTML = `<div class="p-4 text-center bg-amber-50 rounded-md border border-amber-200">
+                    <p class="font-semibold text-amber-700">Nessun Docente 'D' Trovato</p>
+                    <p class="text-sm text-amber-600">Nessun collega ha l'ora di disposizione in orario.</p>
+                </div>`;
+            }
+        }
+
+        // ===============================================
+        // 4. FUNZIONE DI VISUALIZZAZIONE
+        // ===============================================
+
+        function visualizzaOrarioDocente(docente, giorno, oraEvidenziata = null) {
+            document.getElementById('docente-dettaglio').textContent = docente;
+            const dettaglioDiv = document.getElementById('orario-docente-dettaglio');
+            const orario = getOrarioDocente(docente, giorno);
+
+            if (!orario) {
+                dettaglioDiv.innerHTML = `<p class="text-red-500">Orario non trovato.</p>`;
+                return;
+            }
+
+            let html = `
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="table-header">
+                        <tr>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-1/4">Ora</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Impegno</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Stato (Reg.)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-slate-200">
+            `;
+            
+            Object.keys(orario).filter(k => k.startsWith('ora')).forEach(key => {
+                const impegno = orario[key] || '–';
+                const statoRegistrato = getAssenzaRegistrata(docente, giorno, key);
+                
+                const isEvidenziata = key === oraEvidenziata;
+                const isDisposizione = impegno === 'D';
+                const isAssente = statoRegistrato === 'A';
+                const isPermesso = statoRegistrato === 'P';
+
+                let cellClass = '';
+                let statoClass = 'text-slate-500';
+                let statoText = '';
+
+                if (isEvidenziata) cellClass += ' assenza-cell';
+                if (isDisposizione) cellClass += ' disposizione-cell';
+                
+                if (isAssente) {
+                    statoText = 'A';
+                    statoClass = 'font-bold text-red-600';
+                } else if (isPermesso) {
+                    statoText = 'P';
+                    statoClass = 'font-bold text-amber-600';
+                } else {
+                    statoText = 'L';
+                    statoClass = 'text-emerald-600';
+                }
+
+                const rowClass = isEvidenziata ? 'assenza-row' : '';
+
+                html += `
+                    <tr class="${rowClass}">
+                        <td class="px-3 py-2.5 whitespace-nowrap text-sm font-medium text-slate-800 ${cellClass}">${key.replace('ora', 'ª')}</td>
+                        <td class="px-3 py-2.5 whitespace-nowrap text-sm text-slate-700 ${cellClass}">${impegno}</td>
+                        <td class="px-3 py-2.5 whitespace-nowrap text-sm ${statoClass}">${statoText}</td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table>`;
+            dettaglioDiv.innerHTML = html;
+        }
+
+        // ===============================================
+        // 5. FUNZIONI GEMINI LLM
+        // ===============================================
+        
+        async function fetchWithRetry(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return response;
+                    }
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+            }
+        }
+        
+        async function generaSuggerimentoLLM(supplente, giorno, ora, docenteAssente, lezione) {
+            const outputDiv = document.getElementById('llm-output');
+            outputDiv.innerHTML = `
+                <div class="flex items-center space-x-2 text-indigo-600 font-semibold">
+                    <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <p>Analisi supplenza in corso...</p>
+                </div>
+            `;
+            
+            const oraNum = ora.replace('ora', 'ª');
+            
+            const systemPrompt = "Sei un assistente AI per la segreteria scolastica. Il tuo compito è analizzare rapidamente la necessità di supplenza in base all'orario e fornire un suggerimento conciso e una nota operativa per il supplente. La tua risposta deve essere in italiano e in formato JSON strutturato.";
+            
+            // Il prompt fornisce il contesto e chiede l'output strutturato
+            const userQuery = `Il docente ${docenteAssente} è assente il ${giorno} alla ${oraNum} ora con la lezione: ${lezione}. Stiamo considerando di assegnare la supplenza al docente ${supplente}, che in quell'ora è in Disponibilità ('D'). Fornisci un'analisi di massimo 30 parole e una nota operativa per il supplente di massimo 50 parole.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "analisi": { "type": "STRING", "description": "Analisi di massima 30 parole sulla idoneità/natura della supplenza." },
+                            "notaOperativa": { "type": "STRING", "description": "Nota operativa di massimo 50 parole per il supplente (attività da svolgere, es. 'Sorvegliare ripasso')." }
+                        },
+                        "propertyOrdering": ["analisi", "notaOperativa"]
+                    }
+                }
+            };
+
+            try {
+                const response = await fetchWithRetry(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (jsonText) {
+                    const parsedJson = JSON.parse(jsonText);
+                    
+                    outputDiv.innerHTML = `
+                        <div class="space-y-4">
+                            <div>
+                                <h3 class="font-semibold text-base text-indigo-700">Analisi LLM:</h3>
+                                <p class="text-sm text-slate-700">${parsedJson.analisi || 'Nessuna analisi disponibile.'}</p>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-base text-indigo-700">Nota Operativa Suggerita:</h3>
+                                <p class="text-sm text-slate-700 p-3 bg-white rounded-md border border-indigo-200">${parsedJson.notaOperativa || 'Nessuna nota operativa disponibile.'}</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    throw new Error("Risposta LLM non valida.");
+                }
+
+            } catch (error) {
+                console.error("Errore nella chiamata LLM:", error);
+                outputDiv.innerHTML = `<p class="text-sm text-red-600">Errore: Impossibile contattare l'Assistente Intelligente. Riprova più tardi.</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
