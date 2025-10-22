@@ -1,6 +1,6 @@
 <!-- Chosen Palette: Emerald and Slate -->
-<!-- Application Structure Plan: La struttura è stata aggiornata per includere un sistema a schede (Tabbed Interface) che funge da navigazione principale: 1) Ricerca Sostituzioni e 2) Registro Assenze. Questo design a tab permette di gestire due flussi di lavoro distinti (registrazione vs. risoluzione immediata) all'interno di una singola pagina, migliorando l'architettura dell'informazione e la UI/UX. La sezione di Ricerca (Dashboard) rimane focalizzata sull'input-output rapido. La nuova sezione Registro Assenze è una matrice interattiva (simulazione di foglio di calcolo) per la registrazione massiva, offrendo la "singola scremata" richiesta. -->
-<!-- Visualization & Content Choices: La nuova matrice utilizza input HTML diretti per simulare un foglio di calcolo, consentendo l'inserimento rapido di 'A'/'P' per giorno/ora. Un pulsante aggiorna lo stato e potenzialmente può alimentare futuri filtri di ricerca, creando un ponte funzionale tra le due tab. [Obiettivo: Registrazione massiva -> Metodo: Tabella/Matrice interattiva (HTML/JS) -> Interazione: Modifica diretta delle celle e salvataggio dello stato in JS -> Giustificazione: Massima efficienza per il data entry delle assenze settimanali/orarie]. Nessuna libreria di grafici utilizzata. -->
+<!-- Application Structure Plan: La struttura utilizza una Tabbed Interface per separare la Registrazione (Sheet) dalla Risoluzione (Ricerca Avanzata). La logica di Ricerca è stata potenziata con un motore a priorità fisse (Compresenza, Docente/Classe, Stessa Materia, Generica) per automatizzare la decisione di supplenza, trasformando il cruscotto da un semplice filtro a un sistema di raccomandazione intelligente. La matrice delle assenze è stata migliorata per consentire l'inserimento rapido dell'assenza per l'intera giornata. -->
+<!-- Visualization & Content Choices: La visualizzazione del risultato della supplenza usa colori (tramite classi CSS) per indicare immediatamente la priorità di scelta (es. Giallo per Compresenza, Verde per Generica). La matrice oraria e l'anagrafica materie sono state estratte dai dati originali per alimentare il nuovo motore di priorità. Nessuna libreria di grafici utilizzata. -->
 <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 <!DOCTYPE html>
 <html lang="it">
@@ -56,6 +56,7 @@
         .table-header {
             background-color: #f1f5f9; /* slate-100 */
         }
+        /* Stili per le celle del Registro Assenze */
         .disposizione-cell {
             background-color: #ecfdf5; /* emerald-50 */
             color: #065f46; /* emerald-800 */
@@ -107,6 +108,22 @@
              background-color: #fcd34d; /* amber-300 */
              color: #92400e; /* amber-800 */
         }
+
+        /* Stili per le Priorità di Supplenza */
+        .prio-0 { background-color: #fff2cc; color: #333; } /* Giallo Chiaro - Compresenza */
+        .prio-1 { background-color: #c9daf8; color: #333; } /* Azzurro Chiaro - Docente Classe */
+        .prio-2 { background-color: #fce5cd; color: #333; } /* Arancione Chiaro - Stessa Materia */
+        .prio-3 { background-color: #d9ead3; color: #333; } /* Verde Chiaro - Disponibilità Generica */
+        .prio-neg { background-color: #f4cccc; color: #a00; font-weight: 700; } /* Rosso Chiaro - NON TROVATO */
+        .prio-man { background-color: #d9d2e9; color: #400080; } /* Viola Chiaro - Forzatura Manuale */
+
+        .supplente-box {
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.2;
+        }
     </style>
 </head>
 <body class="p-4 sm:p-6 md:p-8">
@@ -135,7 +152,7 @@
         <div id="tab-ricerca" class="tab-content space-y-8">
             <section class="card p-6">
                 <h2 class="text-xl font-semibold text-slate-700 mb-1">Cerca un Supplente</h2>
-                <p class="text-sm text-slate-500 mb-6">Seleziona un docente, il giorno e l'ora dell'assenza per trovare i colleghi a disposizione.</p>
+                <p class="text-sm text-slate-500 mb-6">Seleziona un docente, il giorno e l'ora dell'assenza per avviare la ricerca automatica.</p>
                 
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div>
@@ -168,7 +185,7 @@
                         </select>
                     </div>
                     <button onclick="cercaSupplenti()" class="btn-primary w-full">
-                        Cerca
+                        Esegui Ricerca Avanzata
                     </button>
                 </div>
             </section>
@@ -176,9 +193,15 @@
             <section id="output-section" class="grid grid-cols-1 lg:grid-cols-5 gap-8 hidden">
                 <div class="lg:col-span-2 space-y-4">
                     <div class="card p-6">
-                        <h2 class="text-xl font-semibold text-slate-700 mb-4">Supplenti Disponibili</h2>
+                        <h2 class="text-xl font-semibold text-slate-700 mb-4">Risultato Sostituzione</h2>
                         <div id="info-lezione" class="mb-4 p-4 rounded-md bg-red-50 border border-red-200"></div>
-                        <div id="lista-supplenti" class="space-y-2 text-slate-600"></div>
+                        <div id="supplente-assegnato" class="space-y-3">
+                            <!-- Qui apparirà il risultato della priorità -->
+                        </div>
+                        <div id="lista-supplenti-disponibili" class="mt-4 border-t pt-4">
+                            <p class="text-sm font-semibold text-slate-700 mb-2">Altri Docenti Disponibili (D):</p>
+                            <div id="lista-supplenti" class="space-y-2 text-slate-600 text-sm"></div>
+                        </div>
                     </div>
                     
                     <!-- Nuovo Blocco LLM -->
@@ -187,7 +210,7 @@
                             ✨ Assistente Sostituzioni Intelligente
                         </h2>
                         <div id="llm-output">
-                            <p class="text-sm text-indigo-500">Seleziona un'assenza e un potenziale supplente per ricevere un suggerimento automatico.</p>
+                            <p class="text-sm text-indigo-500">Seleziona un potenziale supplente per ricevere un suggerimento automatico.</p>
                         </div>
                     </div>
                     <!-- Fine Nuovo Blocco LLM -->
@@ -208,7 +231,7 @@
         <div id="tab-registro" class="tab-content hidden space-y-6">
             <section class="card p-6">
                 <h2 class="text-xl font-semibold text-slate-700 mb-2">Registro Assenze Orarie (Settimanale)</h2>
-                <p class="text-sm text-slate-500 mb-4">Inserisci A (Assente) o P (Permesso) direttamente nelle celle. Le celle senza lezione o in 'D' sono bloccate.</p>
+                <p class="text-sm text-slate-500 mb-4">Inserisci A (Assente) o P (Permesso) nelle ore di lezione. 'D' e celle vuote sono bloccate.</p>
                 <div id="registro-sheet" class="overflow-x-auto">
                     <!-- Il foglio di calcolo verrà popolato qui -->
                 </div>
@@ -222,6 +245,16 @@
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
         const LLM_MODEL = "gemini-2.5-flash-preview-09-2025";
         
+        // Colori per la Legenda
+        const PRIORITY_COLORS = {
+            '0': { class: 'prio-0', label: '🟡 Compresenza Automatica' },
+            '1': { class: 'prio-1', label: '🔵 Priorità 1: Docente della Classe' },
+            '2': { class: 'prio-2', label: '🟠 Priorità 2: Stessa Materia' },
+            '3': { class: 'prio-3', label: '🟢 Priorità 3: Disponibilità Generica' },
+            'NEG': { class: 'prio-neg', label: '🔴 Sostituto NON Trovato' },
+            'MAN': { class: 'prio-man', label: '🟣 Forzatura Manuale' } // Non usato nel codice, ma per legenda
+        };
+
         const orariSettimanali = {
             "Lunedì": [
                 {"Docente": "ACCARDO L.", "1ora": "5C - TTIM", "2ora": "5C - TTIM", "3ora": "D", "4ora": "5C - TMA", "5ora": "", "6ora": "", "7ora": "", "8ora": "", "9ora": "", "10ora": ""},
@@ -500,16 +533,71 @@
             ]
         };
 
-        const docenti = orariSettimanali['Lunedì'].map(d => d.Docente).sort();
+        // NUOVA STRUTTURA: Docente -> [MATERIA1, MATERIA2, ...]
+        const materieDocenti = {
+            "ACCARDO L.": ["TTIM", "TMA"],
+            "ANFOSSO A.": ["MAT"],
+            "ANTICO R.": ["LTE", "SI", "STO.", "TTRG", "TTIM"],
+            "ARMAROLI A.": ["ING", "ING."],
+            "BAROSIO S.": ["SM"],
+            "BASSO V.": ["TTRG", "TTRG."],
+            "BEARDO C.": ["TEEA", "TEEA."],
+            "BONORI F.": ["TTRG", "TMA"],
+            "BUSETTO C.": ["TEEA"],
+            "CALABRETTA M.": ["TTIM", "TEEA", "TEEA."],
+            "CAMISASSO S.": ["MAT"],
+            "CANCILLA A.": ["MAT"],
+            "CARACCIOLO P.": ["TTRG", "TMA", "LTE"],
+            "CARTAGENOVA P.": ["ITA", "STO", "STO.", "ITA"],
+            "CERRATO A.": ["TIC"],
+            "CESANI L.": [], // Docente con solo D in orario
+            "CEVOLI C.": ["LTE", "TTIM", "TMA.", "SI"],
+            "CHIRIZZI G.": ["TMA", "TTIM"],
+            "CIURCOVICH S.": ["ING"],
+            "COPPOLA A.": ["ITA", "STO", "STO.", "APP. ITA"],
+            "D'AMICO A.": ["STO.", "ITA", "STO"],
+            "DE GENNARO C.": ["LTE", "TTRG", "SI"],
+            "DI BENEDETTO C.": ["LTE", "TTIM", "LTE.", "TMA"],
+            "DI LELLA L.": ["TEEA", "TTRG"],
+            "FIGARI S.": ["SM"],
+            "GILARDI L.": ["TTIM", "LTE", "TTRG", "TEEA", "TEEA."],
+            "ISNARDI B.": ["ING"],
+            "LISBO M.": ["MAT"],
+            "LOMBARDO G.": ["LTE", "TTIM", "SI", "TMA"],
+            "LUONGO G.": ["SI"],
+            "MARGUATI M.": ["ITA", "STO", "STO."],
+            "MILIA S.": ["GEO"],
+            "NIDO T.": ["TIC"],
+            "ODDI G.": ["TMA", "TTIM", "TTRG", "TTRG."],
+            "ONETO F.": ["TEEA", "TTIM"],
+            "ORLANDINI B.": ["TMA", "TTIM"],
+            "PARODI G.": ["SI"],
+            "PIRAS S.": [], // Docente con solo D in orario
+            "POGLIANI P.": ["STO", "STO.", "ITA", "APP. ITA"],
+            "PREVITERA G.": [], // Docente con solo D in orario
+            "PRIANO W.": ["TTIM", "TMA"],
+            "RAIMONDI C.": ["ING"],
+            "ROTOLO G.": ["SI", "TEEA", "TTIM", "TTRG"],
+            "RUSSO A.": ["DIR", "SI"],
+            "SARRA P. G.": ["TMA"],
+            "SEGGIO A.": ["TIC"],
+            "SERGI G.": ["REL/ALT"],
+            "SFERRAZZA R.": ["DIR"],
+            "SPINOGLIO S.": ["LTE", "TTIM", "TEEA"],
+            "TABOR L.": ["LTE", "TEEA"],
+            "TACCHELLA A.": ["TMA", "TTIM", "TMA."],
+            "TECILLA E.": ["STO.", "ITA", "STO"],
+            "TUCCITTO C.": ["TTRG", "TMA", "LTE"]
+        };
+
+        const docenti = Object.keys(materieDocenti).sort();
         const giorni = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"];
         const ore = ["1ora", "2ora", "3ora", "4ora", "5ora", "6ora", "7ora", "8ora", "9ora", "10ora"];
 
-        // STATO GLOBALE: tiene traccia delle assenze registrate (simula il foglio sheet)
-        // Struttura: { Docente: { Giorno: { Ora: 'A' | 'P' | 'L' } } }
         let assenzeAttuali = {}; 
         
         // ===============================================
-        // FUNZIONI DI UTILITÀ GLOBALI (SPOSTATE QUI PER ACCESSIBILITÀ)
+        // FUNZIONI DI UTILITÀ GLOBALI
         // ===============================================
 
         function getOrarioDocente(docente, giorno) {
@@ -518,6 +606,16 @@
 
         function getAssenzaRegistrata(docente, giorno, ora) {
             return assenzeAttuali[docente]?.[giorno]?.[ora] || 'L';
+        }
+
+        function getClasseMateria(impegno) {
+            if (!impegno || impegno === 'D' || impegno === 'Libero' || impegno === 'N/D') {
+                return { classe: null, materia: null };
+            }
+            const parts = impegno.split(' - ');
+            const classe = parts[0].trim();
+            const materia = parts.length > 1 ? parts[1].trim().replace('.', '') : null;
+            return { classe, materia };
         }
         
         // ===============================================
@@ -559,7 +657,7 @@
         }
         
         // ===============================================
-        // 2. LOGICA REGISTRO ASSENZE (NUOVA)
+        // 2. LOGICA REGISTRO ASSENZE (SHEET)
         // ===============================================
         
         function initAssenzeAttuali(giorno, ora) {
@@ -575,18 +673,37 @@
                 }
             });
         }
+
+        function registraAssenzaGiornaliera(docente, giorno) {
+            const orarioGiorno = getOrarioDocente(docente, giorno);
+            if (!orarioGiorno) return;
+
+            ore.forEach(ora => {
+                const impegno = orarioGiorno[ora];
+                // Registra 'A' solo se c'è lezione (non è D o vuoto)
+                if (impegno && impegno !== 'D') {
+                    assenzeAttuali[docente][giorno][ora] = 'A';
+                }
+            });
+
+            // Ricarica la scheda per visualizzare lo stato aggiornato
+            popolaRegistroSheet();
+            alert(`Assenza di ${docente} registrata per tutte le ore di lezione del ${giorno}.`);
+        }
         
         function popolaRegistroSheet() {
             const container = document.getElementById('registro-sheet');
             let html = `<table class="min-w-full divide-y divide-slate-200">
                 <thead class="table-header sticky top-0">
                     <tr>
-                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider sticky left-0 bg-slate-100 z-10">Docente</th>`;
+                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider sticky left-0 bg-slate-100 z-10 w-1/5">Docente</th>`;
             
             giorni.forEach(giorno => {
                 ore.forEach((_, index) => {
                     html += `<th class="px-1 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">${giorno.substring(0, 3)} - ${index + 1}ª</th>`;
                 });
+                // Aggiungi colonna per l'assenza giornaliera
+                html += `<th class="px-1 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider bg-slate-200 text-slate-800">${giorno.substring(0, 3)} A/G</th>`;
             });
             
             html += `</tr></thead><tbody class="bg-white divide-y divide-slate-200">`;
@@ -624,6 +741,13 @@
                                 ${disabledAttr}>
                             </td>`;
                     });
+
+                    // Colonna pulsante per assenza giornaliera
+                    html += `<td class="px-1 py-1 text-center bg-slate-100">
+                        <button onclick="registraAssenzaGiornaliera('${docente}', '${giorno}')" 
+                            class="bg-red-400 hover:bg-red-600 text-white text-xs font-bold py-1 px-2 rounded-md transition duration-150"
+                            title="Segna Assente per tutte le ore di lezione">A</button>
+                    </td>`;
                 });
                 html += `</tr>`;
             });
@@ -662,9 +786,78 @@
 
 
         // ===============================================
-        // 3. LOGICA RICERCA SUPPLENTI
+        // 3. LOGICA RICERCA AVANZATA (PRIORITÀ)
         // ===============================================
         
+        // NUOVA FUNZIONE CENTRALE PER LA LOGICA DI PRIORITÀ
+        function trovaMigliorSupplente(giorno, ora, classeAssente, materiaAssente, docenteAssente) {
+            const orarioGiorno = orariSettimanali[giorno];
+            
+            // 1. Filtra tutti i docenti che sono disponibili (D) in quell'ora E non sono già segnati come assenti (A) o in permesso (P)
+            const candidatiD = orarioGiorno.filter(doc => 
+                doc[ora] === 'D' && 
+                doc.Docente !== docenteAssente &&
+                getAssenzaRegistrata(doc.Docente, giorno, ora) === 'L'
+            ).map(doc => doc.Docente);
+
+
+            // PRIORITÀ 0: Compresenza Automatica (Se l'impegno è una compresenza, es: '4A/2 - MAT') - NON IMPLEMENTATA nei dati forniti, ma pronta come logica iniziale.
+            // Per i dati attuali, usiamo l'impegno 'D' del docente.
+            // La compresenza si verifica se l'orario del docente assente conteneva un secondo nome.
+            // Dato che il CSV originale non ha la compresenza integrata nel campo 'Impegno', usiamo solo il campo 'D'.
+
+            // 1.0: Controlla la compresenza (se non c'è lezione da coprire, non serve supplente)
+            const orarioAssente = getOrarioDocente(docenteAssente, giorno);
+            const impegnoAssente = orarioAssente ? orarioAssente[ora] : '';
+            // Se l'impegno è già 'D' o vuoto, non serve supplente, ma non è una "copertura automatica" da Compresenza.
+            if (!impegnoAssente || impegnoAssente === 'D') {
+                return { supplente: null, priorita: 'NEG', descrizione: `${materiaAssente} in ${classeAssente} (Nessuna lezione da coprire)` };
+            }
+
+            // 2. PRIORITÀ 1: Docente della Classe (insegna QUALSIASI materia in CLASSE ASSENTE)
+            let supplenteP1 = null;
+            for (const supplente of candidatiD) {
+                const orarioSupplente = getOrarioDocente(supplente, giorno);
+                if (orarioSupplente) {
+                    for (const key of ore) {
+                        const { classe: c } = getClasseMateria(orarioSupplente[key]);
+                        if (c === classeAssente) {
+                            supplenteP1 = supplente;
+                            break;
+                        }
+                    }
+                }
+                if (supplenteP1) break;
+            }
+            if (supplenteP1) {
+                return { supplente: supplenteP1, priorita: '1', descrizione: `Docente della classe ${classeAssente} trovato.` };
+            }
+
+            // 3. PRIORITÀ 2: Stessa Materia (insegna la MATERIA ASSENTE in QUALSIASI classe)
+            let supplenteP2 = null;
+            const materieAssente = materiaAssente.split('/').map(m => m.trim().replace('.', '')); // Gestisce MAT/INF
+            for (const supplente of candidatiD) {
+                const materieSupplente = materieDocenti[supplente] || [];
+                if (materieSupplente.some(ms => materieAssente.includes(ms))) {
+                    supplenteP2 = supplente;
+                    break;
+                }
+            }
+            if (supplenteP2) {
+                return { supplente: supplenteP2, priorita: '2', descrizione: `Docente di ${materiaAssente} (stessa materia) trovato.` };
+            }
+
+            // 4. PRIORITÀ 3: Disponibilità Generica
+            if (candidatiD.length > 0) {
+                // Scegli il primo disponibile (o potresti implementare "quello con meno ore")
+                const supplenteP3 = candidatiD[0];
+                return { supplente: supplenteP3, priorita: '3', descrizione: `Primo supplente generico a disposizione trovato.` };
+            }
+
+            // 5. CASO NEGATIVO: NON TROVATO
+            return { supplente: null, priorita: 'NEG', descrizione: `Nessun supplente disponibile (D) in orario.` };
+        }
+
         function cercaSupplenti() {
             document.getElementById('llm-output').innerHTML = '<p class="text-sm text-indigo-500">Seleziona un potenziale supplente per ricevere un suggerimento automatico.</p>';
             document.getElementById('initial-message').classList.add('hidden');
@@ -676,10 +869,13 @@
 
             const listaSupplentiDiv = document.getElementById('lista-supplenti');
             const infoLezioneDiv = document.getElementById('info-lezione');
+            const supplenteAssegnatoDiv = document.getElementById('supplente-assegnato');
+            
+            supplenteAssegnatoDiv.innerHTML = '';
+            listaSupplentiDiv.innerHTML = '';
             
             if (!docenteAssente) {
                 infoLezioneDiv.innerHTML = `<p class="font-semibold text-red-700">Per favore, seleziona un docente.</p>`;
-                listaSupplentiDiv.innerHTML = '';
                 document.getElementById('docente-dettaglio').textContent = '';
                 document.getElementById('orario-docente-dettaglio').innerHTML = '';
                 return;
@@ -689,55 +885,81 @@
             visualizzaOrarioDocente(docenteAssente, giornoAssenza, oraAssenza);
 
             const impegnoAssente = orarioAssente ? (orarioAssente[oraAssenza] || 'Libero') : 'N/D';
+            const lezioneDaCoprire = impegnoAssente !== 'D' && impegnoAssente !== 'Libero' && impegnoAssente !== 'N/D';
+
+            const { classe: classeAssente, materia: materiaAssente } = getClasseMateria(impegnoAssente);
             
-            const lezioneDaCoprire = impegnoAssente !== 'D' && impegnoAssente !== 'Libero';
+            // Verificare se il docente assente è registrato come A o P
+            const statoDocenteAssente = getAssenzaRegistrata(docenteAssente, giornoAssenza, oraAssenza);
+
+            if (statoDocenteAssente !== 'A' && statoDocenteAssente !== 'P') {
+                 infoLezioneDiv.innerHTML = `
+                    <p class="font-bold text-lg text-emerald-600">Docente presente/libero (L).</p>
+                    <p class="text-sm text-slate-500">Non è stata registrata un'assenza per quest'ora. Nessuna supplenza necessaria.</p>
+                 `;
+                 return;
+            }
+
 
             infoLezioneDiv.innerHTML = `
-                <p class="text-sm text-slate-600">Impegno in quest'ora:</p>
-                <p class="font-bold text-xl ${lezioneDaCoprire ? 'text-red-600' : 'text-slate-600'}">${impegnoAssente}</p>
+                <p class="text-sm text-slate-600">Assente: ${docenteAssente} (${statoDocenteAssente})</p>
+                <p class="font-bold text-xl ${lezioneDaCoprire ? 'text-red-600' : 'text-slate-600'}">Lezione: ${impegnoAssente}</p>
                 <p class="text-xs text-slate-500 mt-1">${giornoAssenza} - ${oraAssenza.replace('ora','')}ª Ora</p>
-                ${lezioneDaCoprire ? '<p class="text-xs font-semibold text-red-600 mt-2">❗ Lezione da coprire.</p>' : '<p class="text-xs font-semibold text-emerald-600 mt-2">✅ Non ci sono lezioni da coprire.</p>'}
             `;
 
+            if (lezioneDaCoprire) {
+                // Esecuzione Logica di Priorità
+                const risultatoSostituzione = trovaMigliorSupplente(giornoAssenza, oraAssenza, classeAssente, materiaAssente, docenteAssente);
+                
+                const { supplente, priorita, descrizione } = risultatoSostituzione;
+                const { class: prioClass, label: prioLabel } = PRIORITY_COLORS[priorita] || PRIORITY_COLORS['NEG'];
+                
+                let supplenteFinalText = 'NON TROVATO';
+                let supplenteClickAction = '';
 
-            const supplentiDisponibili = orariSettimanali[giornoAssenza]
-                .filter(docente => docente[oraAssenza] === 'D' && docente.Docente !== docenteAssente)
-                .map(docente => docente.Docente)
-                .sort();
+                if (supplente) {
+                    supplenteFinalText = supplente;
+                    supplenteClickAction = `onclick="visualizzaOrarioDocente('${supplente}', '${giornoAssenza}', '${oraAssenza}'); generaSuggerimentoLLM('${supplente}', '${giornoAssenza}', '${oraAssenza}', '${docenteAssente}', '${impegnoAssente}')" class="cursor-pointer"`;
+                }
 
-            if (supplentiDisponibili.length > 0) {
-                let html = '<p class="text-sm font-semibold text-slate-700">Docenti con Disponibilità (D) in Orario:</p>';
-                html += '<ul class="divide-y divide-slate-200 border-t border-b border-slate-200 mt-2">';
-                supplentiDisponibili.forEach(docente => {
-                    const statoAssenza = getAssenzaRegistrata(docente, giornoAssenza, oraAssenza);
-                    let statoText = '';
-                    let statoColor = 'text-slate-500';
+                supplenteAssegnatoDiv.innerHTML = `
+                    <p class="text-sm font-medium text-slate-700">Supplente Assegnato (Priorità ${priorita}):</p>
+                    <div class="supplente-box ${prioClass}" ${supplenteClickAction}>
+                        <p class="text-xs font-semibold">${prioLabel}</p>
+                        <p class="text-lg">${supplenteFinalText}</p>
+                        <p class="text-xs font-normal mt-1 text-slate-700">${descrizione}</p>
+                    </div>
+                `;
+            } else {
+                supplenteAssegnatoDiv.innerHTML = `<div class="p-4 text-center bg-emerald-50 rounded-md border border-emerald-200">
+                    <p class="font-semibold text-emerald-700">Nessuna supplenza necessaria</p>
+                    <p class="text-sm text-emerald-600">Il docente assente non aveva lezione in quest'ora.</p>
+                </div>`;
+            }
 
-                    if (statoAssenza === 'A') {
-                        statoText = ' (ASSENTE)';
-                        statoColor = 'text-red-600 font-bold';
-                    } else if (statoAssenza === 'P') {
-                        statoText = ' (PERMESSO)';
-                        statoColor = 'text-amber-600 font-bold';
-                    } else {
-                        statoText = ' (Disponibile)';
-                        statoColor = 'text-emerald-600 font-bold';
-                    }
 
-                    // Aggiungi la chiamata alla funzione LLM al click
+            // Popola la lista dei supplenti disponibili (per riferimento)
+            const candidatiD = orarioAssente ? orariSettimanali[giornoAssenza]
+                .filter(doc => 
+                    doc[oraAssenza] === 'D' && 
+                    doc.Docente !== docenteAssente &&
+                    getAssenzaRegistrata(doc.Docente, giornoAssenza, oraAssenza) === 'L'
+                ).map(doc => doc.Docente) : [];
+
+
+            if (candidatiD.length > 0) {
+                let html = '<ul class="divide-y divide-slate-200 border-t border-b border-slate-200 mt-2">';
+                candidatiD.forEach(docente => {
                     html += `
-                        <li class="p-3 flex justify-between items-center hover:bg-emerald-50 cursor-pointer" onclick="visualizzaOrarioDocente('${docente}', '${giornoAssenza}', '${oraAssenza}'); generaSuggerimentoLLM('${docente}', '${giornoAssenza}', '${oraAssenza}', '${docenteAssente}', '${impegnoAssente}')">
+                        <li class="p-2 flex justify-between items-center hover:bg-emerald-50 cursor-pointer" onclick="visualizzaOrarioDocente('${docente}', '${giornoAssenza}', '${oraAssenza}'); generaSuggerimentoLLM('${docente}', '${giornoAssenza}', '${oraAssenza}', '${docenteAssente}', '${impegnoAssente}')">
                             <span class="font-semibold text-slate-700">${docente}</span>
-                            <span class="${statoColor} text-xs md:text-sm">${statoText}</span>
+                            <span class="text-emerald-600 text-xs md:text-sm">(Disponibile)</span>
                         </li>`;
                 });
                 html += '</ul>';
                 listaSupplentiDiv.innerHTML = html;
             } else {
-                listaSupplentiDiv.innerHTML = `<div class="p-4 text-center bg-amber-50 rounded-md border border-amber-200">
-                    <p class="font-semibold text-amber-700">Nessun Docente 'D' Trovato</p>
-                    <p class="text-sm text-amber-600">Nessun collega ha l'ora di disposizione in orario.</p>
-                </div>`;
+                 listaSupplentiDiv.innerHTML = `<p class="text-xs text-amber-600">Nessun altro docente con 'D' in orario risulta attualmente disponibile nel Registro Assenze.</p>`;
             }
         }
 
@@ -840,7 +1062,6 @@
             
             const systemPrompt = "Sei un assistente AI per la segreteria scolastica. Il tuo compito è analizzare rapidamente la necessità di supplenza in base all'orario e fornire un suggerimento conciso e una nota operativa per il supplente. La tua risposta deve essere in italiano e in formato JSON strutturato.";
             
-            // Il prompt fornisce il contesto e chiede l'output strutturato
             const userQuery = `Il docente ${docenteAssente} è assente il ${giorno} alla ${oraNum} ora con la lezione: ${lezione}. Stiamo considerando di assegnare la supplenza al docente ${supplente}, che in quell'ora è in Disponibilità ('D'). Fornisci un'analisi di massimo 30 parole e una nota operativa per il supplente di massimo 50 parole.`;
 
             const payload = {
