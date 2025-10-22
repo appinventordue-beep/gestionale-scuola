@@ -8,23 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Importa la font Inter -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-    
-    <!-- Importa Firebase SDK -->
-    <script type="module">
-        // Importa le funzioni di cui hai bisogno
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Rendi le funzioni/variabili accessibili globalmente
-        // Questo ci permette di usarle nello script non-module qui sotto
-        window.firebase = {
-            initializeApp,
-            getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged,
-            getFirestore, doc, getDoc, setDoc, deleteDoc, setLogLevel
-        };
-    </script>
-    
     <style>
         /* Stile base con la font Inter */
         body {
@@ -44,16 +27,36 @@
             top: 0;
             z-index: 10;
         }
-
-        /* Input per permessi brevi (ex checkbox) */
-        .absence-input {
-            transition: all 0.2s ease;
+        /* Nasconde la freccia standard dei checkbox */
+        input[type="checkbox"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            border-radius: 0.25rem; /* rounded */
+            border-width: 1px;
+            border-color: #cbd5e0; /* gray-400 */
+            width: 1.25rem; /* w-5 */
+            height: 1.25rem; /* h-5 */
+            cursor: pointer;
+            vertical-align: middle;
+            position: relative;
         }
-        .absence-input:focus {
-            border-color: #3b82f6; /* blue-500 */
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+        /* Stile personalizzato per il checkbox "checked" */
+        input[type="checkbox"]:checked {
+            background-color: #dc2626; /* red-600 */
+            border-color: #dc2626; /* red-600 */
         }
-
+        /* Aggiunge la "A" di Assente al checkbox */
+        input[type="checkbox"]:checked::after {
+            content: 'A';
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
         /* Colori di sfondo per la motivazione */
         .bg-yellow-50 { background-color: #fffbeb; } /* Giallo Chiaro per Compresenza */
         .bg-blue-50 { background-color: #eff6ff; } /* Azzurro Chiaro per Docente Classe */
@@ -83,49 +86,32 @@
         
         <h1 class="text-3xl font-bold text-gray-800 mb-6">Gestionale Assenze Docenti</h1>
 
-        <!-- Sezione di Stato e Caricamento (Modificata) -->
-        <div id="status-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
-            <div id="status-header" class="flex justify-between items-center">
-                 <h2 id="status-title" class="text-lg font-semibold text-gray-700">
-                    Stato Applicazione
-                 </h2>
-                 <!-- Pulsante per resettare gli orari, inizialmente nascosto -->
-                 <button id="clear-schedules-btn" class="hidden bg-red-50 text-red-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors">
-                    Resetta e Ricarica Orari...
-                 </button>
+        <!-- Sezione di Caricamento File -->
+        <div id="uploader-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <label for="csv-uploader" class="block text-lg font-semibold text-gray-700 mb-3">
+                1. Carica i file CSV (Docenti e Classi)
+            </label>
+            <p class="text-sm text-gray-500 mb-4">Seleziona tutti i file <code>.csv</code> degli orari. Lo script riconoscerà automaticamente i file docenti e classi.</p>
+            <input type="file" id="csv-uploader" multiple accept=".csv" 
+                   class="block w-full text-sm text-gray-500
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-lg file:border-0
+                          file:text-sm file:font-semibold
+                          file:bg-blue-50 file:text-blue-700
+                          hover:file:bg-blue-100 cursor-pointer">
+            <div id="loading-spinner" class="hidden mt-4">
+                <p class="text-blue-600 animate-pulse">Caricamento e elaborazione orari...</p>
             </div>
-            
-            <!-- Messaggio di stato che guida l'utente -->
-            <p id="status-message" class="text-sm text-gray-500 mt-3">Inizializzazione e connessione al database...</p>
-            
-            <!-- Uploader (ora nascosto di default) -->
-            <div id="uploader-container" class="hidden mt-4">
-                <p class="text-sm text-gray-500 mb-4">Seleziona tutti i file <code>.csv</code> degli orari. Verranno salvati nel database per i prossimi accessi.</p>
-                <input type="file" id="csv-uploader" multiple accept=".csv" 
-                       class="block w-full text-sm text-gray-500
-                              file:mr-4 file:py-2 file:px-4
-                              file:rounded-lg file:border-0
-                              file:text-sm file:font-semibold
-                              file:bg-blue-50 file:text-blue-700
-                              hover:file:bg-blue-100 cursor-pointer">
-                <div id="loading-spinner" class="hidden mt-4">
-                    <p class="text-blue-600 animate-pulse">Caricamento e elaborazione orari... (Potrebbe richiedere un momento)</p>
-                </div>
-            </div>
-            
-            <!-- Mostra l'ID utente per trasparenza (nascosto) -->
-            <p id="user-id-display" class="hidden mt-4 text-xs text-gray-400"></p>
         </div>
-
 
         <!-- Vista Settimanale ("Foglio Settimana") -->
         <div id="weekly-view" class="bg-white rounded-lg shadow-md overflow-hidden hidden">
             <div class="p-6 border-b border-gray-200">
-                <h2 class="text-2xl font-semibold text-gray-800">Pianificazione Settimanale Assenze</h2>
+                <h2 class="text-2xl font-semibold text-gray-800">2. Pianificazione Settimanale Assenze</h2>
                 <p class="text-sm text-gray-500 mt-2">
-                    Inserisci **"A"** per assenza totale o le ore di permesso (es: **"3,4,5"**).
+                    Seleziona le caselle per segnare un docente come "Assente" in un dato giorno. 
                     <br>
-                    Clicca sull'intestazione del giorno (es. "Lunedì") per generare il foglio sostituzioni.
+                    Clicca sull'intestazione del giorno (es. "Lun") per generare il foglio sostituzioni per quel giorno.
                 </p>
             </div>
             <div class="table-container">
@@ -138,6 +124,7 @@
                             <th class="p-3 text-center text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-700" data-day="Mer">Mercoledì</th>
                             <th class="p-3 text-center text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-700" data-day="Gio">Giovedì</th>
                             <th class="p-3 text-center text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-700" data-day="Ven">Venerdì</th>
+                            <!-- Sabato è escluso come da richiesta implicita (Lun-Ven) -->
                         </tr>
                     </thead>
                     <tbody id="weekly-tbody" class="bg-white divide-y divide-gray-200">
@@ -187,197 +174,15 @@
         // Timeslot come da file (10 ore)
         const timeSlots = ["8.00", "8.50", "9.40", "10.30", "11.20", "12.10", "13.00", "13.50", "14.40", "15.30"];
 
-        // --- INIZIO SEZIONE FIREBASE ---
-        let app, auth, db, userId;
-        let schedulesDocRef; // Riferimento al documento Firestore
-
-        // Elementi DOM (principali)
+        // Elementi DOM
+        const csvUploader = document.getElementById('csv-uploader');
+        const loadingSpinner = document.getElementById('loading-spinner');
         const weeklyView = document.getElementById('weekly-view');
         const dailyView = document.getElementById('daily-view');
         const weeklyTbody = document.getElementById('weekly-tbody');
         const dailyTbody = document.getElementById('daily-tbody');
         const dailyViewTitle = document.getElementById('daily-view-title');
         const backToWeekBtn = document.getElementById('back-to-week');
-        
-        // Elementi DOM per Uploader e Stato
-        const csvUploader = document.getElementById('csv-uploader');
-        const loadingSpinner = document.getElementById('loading-spinner');
-        const statusSection = document.getElementById('status-section');
-        const statusTitle = document.getElementById('status-title');
-        const statusMessage = document.getElementById('status-message');
-        const uploaderContainer = document.getElementById('uploader-container');
-        const clearSchedulesBtn = document.getElementById('clear-schedules-btn');
-        const userIdDisplay = document.getElementById('user-id-display');
-
-
-        // Avvio dell'applicazione
-        window.onload = async () => {
-            // 1. Controlla se le SDK Firebase sono state caricate (dal <script type="module">)
-            if (!window.firebase) {
-                statusMessage.textContent = "Errore critico: Impossibile caricare le librerie del database. Ricarica la pagina.";
-                statusMessage.classList.add("text-red-600", "font-semibold");
-                return;
-            }
-            
-            // Estrai le funzioni da window.firebase
-            const {
-                initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged,
-                getFirestore, doc, getDoc, setDoc, deleteDoc, setLogLevel
-            } = window.firebase;
-
-            try {
-                // 2. Inizializza Firebase
-                // Queste variabili globali (__app_id, ecc.) sono fornite dall'ambiente
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-                const firebaseConfig = JSON.parse(firebaseConfigStr);
-
-                if (!firebaseConfig.apiKey) {
-                    statusMessage.textContent = "Errore: Configurazione database non trovata. Impossibile connettersi.";
-                    statusMessage.classList.add("text-red-600", "font-semibold");
-                    return;
-                }
-
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                setLogLevel('Debug'); // Utile per il debug in console
-
-                // Definisci il percorso del documento: un singolo documento per tutti gli orari
-                const schedulesDocPath = `/artifacts/${appId}/public/data/schedules/main`;
-                schedulesDocRef = doc(db, schedulesDocPath);
-
-                // 3. Autenticazione (necessaria per Firestore)
-                statusMessage.textContent = "Autenticazione in corso...";
-                const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-                if (authToken) {
-                    await signInWithCustomToken(auth, authToken);
-                } else {
-                    console.warn("Token non trovato, avvio come anonimo.");
-                    await signInAnonymously(auth);
-                }
-                
-                userId = auth.currentUser.uid;
-                userIdDisplay.textContent = `ID Sessione: ${userId}`; // Mostra l'ID
-                userIdDisplay.classList.remove('hidden');
-
-                // 4. Carica i dati da Firestore
-                // Questo è il "Passo 1" per l'utente
-                statusMessage.textContent = "Ricerca orari salvati nel database...";
-                await loadSchedulesFromFirestore();
-
-            } catch (error) {
-                console.error("Errore di inizializzazione Firebase:", error);
-                statusMessage.textContent = `Errore di connessione al database: ${error.message}`;
-                statusMessage.classList.add("text-red-600", "font-semibold");
-            }
-        };
-
-        /**
-         * Carica gli orari da Firestore
-         */
-        async function loadSchedulesFromFirestore() {
-            const { getDoc } = window.firebase;
-            try {
-                const docSnap = await getDoc(schedulesDocRef);
-
-                if (docSnap.exists()) {
-                    // "Passo 3" (Uso normale) - Dati trovati!
-                    console.log("Dati caricati da Firestore");
-                    const data = docSnap.data();
-                    
-                    // Popola le variabili globali
-                    teacherSchedules = data.teacherSchedules || {};
-                    classSchedules = data.classSchedules || {};
-                    classCouncils = data.classCouncils || {};
-                    teacherSubjects = data.teacherSubjects || {};
-                    
-                    // Aggiorna l'UI
-                    statusTitle.textContent = "Orari Caricati";
-                    statusMessage.textContent = "Orari caricati con successo dal database. Puoi iniziare a pianificare le assenze.";
-                    uploaderContainer.classList.add('hidden');
-                    clearSchedulesBtn.classList.remove('hidden'); // Mostra il pulsante "Resetta"
-                    
-                    // Renderizza la tabella
-                    renderWeeklyTable();
-                    weeklyView.classList.remove('hidden');
-
-                } else {
-                    // "Passo 2" (Prima volta) - Nessun dato trovato
-                    console.log("Nessun orario trovato nel database. Mostro l'uploader.");
-                    statusTitle.textContent = "Benvenuto!";
-                    statusMessage.textContent = "Nessun orario trovato. Per iniziare, carica i file CSV (docenti e classi) qui sotto. Verranno salvati automaticamente per i futuri accessi.";
-                    uploaderContainer.classList.remove('hidden'); // Mostra l'uploader
-                    clearSchedulesBtn.classList.add('hidden');
-                }
-            } catch (error) {
-                console.error("Errore nel caricare i dati da Firestore:", error);
-                statusMessage.textContent = `Errore di lettura dal database: ${error.message}`;
-                statusMessage.classList.add("text-red-600", "font-semibold");
-                uploaderContainer.classList.remove('hidden'); // Mostra uploader come fallback
-            }
-        }
-
-        /**
-         * Salva gli orari processati su Firestore
-         */
-        async function saveSchedulesToFirestore() {
-            if (!schedulesDocRef) {
-                 console.error("Salvataggio fallito: riferimento al database non inizializzato.");
-                 return;
-            }
-            
-            const { setDoc } = window.firebase;
-            
-            // Crea un unico oggetto da salvare
-            const dataToSave = {
-                teacherSchedules,
-                classSchedules,
-                classCouncils,
-                teacherSubjects,
-                savedAt: new Date().toISOString() // Data salvataggio
-            };
-            
-            try {
-                statusMessage.textContent = "Salvataggio orari nel database...";
-                await setDoc(schedulesDocRef, dataToSave);
-                console.log("Orari salvati con successo in Firestore!");
-                statusMessage.textContent = "Orari salvati nel database per i futuri accessi.";
-                statusTitle.textContent = "Orari Caricati e Salvati";
-                uploaderContainer.classList.add('hidden');
-                clearSchedulesBtn.classList.remove('hidden');
-            } catch (error) {
-                console.error("Errore nel salvataggio in Firestore:", error);
-                statusMessage.textContent = `Errore nel salvataggio nel database: ${error.message}`;
-                statusMessage.classList.add("text-red-600", "font-semibold");
-            }
-        }
-
-        /**
-         * Resetta gli orari (elimina da Firestore e ricarica la pagina)
-         */
-        clearSchedulesBtn.addEventListener('click', async () => {
-            // Non uso confirm() perché bloccante, gestisco direttamente
-            statusMessage.textContent = "Eliminazione orari dal database in corso...";
-            statusMessage.classList.remove("text-red-600", "font-semibold");
-            
-            const { deleteDoc } = window.firebase;
-            
-            try {
-                await deleteDoc(schedulesDocRef);
-                console.log("Documento eliminato. Ricaricamento pagina.");
-                statusMessage.textContent = "Orari resettati. Ricaricamento in corso...";
-                // Ricarica la pagina per ricominciare il processo (mostrerà l'uploader)
-                location.reload(); 
-            } catch (error) {
-                console.error("Errore nell'eliminazione del documento:", error);
-                statusMessage.textContent = `Errore durante il reset: ${error.message}`;
-                statusMessage.classList.add("text-red-600", "font-semibold");
-            }
-        });
-        // --- FINE SEZIONE FIREBASE ---
-
 
         // Event listener per il caricamento file
         csvUploader.addEventListener('change', handleFiles);
@@ -390,7 +195,7 @@
         });
 
         /**
-         * Gestisce i file CSV caricati dall'utente (MODIFICATA)
+         * Gestisce i file CSV caricati dall'utente
          */
         function handleFiles(event) {
             const files = event.target.files;
@@ -405,7 +210,6 @@
             weeklyTbody.innerHTML = '';
             weeklyView.classList.add('hidden');
             dailyView.classList.add('hidden');
-            statusMessage.textContent = "Elaborazione file CSV..."; // Messaggio di caricamento
 
             const promises = [];
             let docFilesCount = 0; // Contatore per file docenti
@@ -420,7 +224,7 @@
                             
                             // *** INIZIO LOGICA DI RICONOSCIMENTO FILE ***
                             const lines = text.split(/\r?\n/);
-                            if (lines.length < 2) { 
+                            if (lines.length < 2) { // Serve almeno l'intestazione e una riga
                                 console.warn(`File saltato: ${file.name} è troppo corto o vuoto.`);
                                 resolve();
                                 return;
@@ -435,7 +239,8 @@
                                 return;
                             }
 
-                            // Heuristic: Nomi docenti hanno spazio (es. "ROSSI M."), classi no (es. "1A").
+                            // Heuristic: I nomi dei docenti contengono uno spazio (es. "ROSSI M."),
+                            // i nomi delle classi no (es. "1A", "1QA").
                             if (namePart.includes(' ')) {
                                 // È un file DOCENTE
                                 if (parseTeacherSchedule(text, file.name)) {
@@ -466,7 +271,7 @@
 
             // Aspetta che tutti i file siano stati processati
             Promise.all(promises)
-                .then(async () => { // Aggiunto async
+                .then(() => {
                     console.log(`Processamento completato. File docenti validi: ${docFilesCount}, File classi validi: ${claFilesCount}`);
                     console.log('Orari docenti processati:', teacherSchedules);
                     console.log('Orari classi processati:', classSchedules);
@@ -475,236 +280,24 @@
                     
                     loadingSpinner.classList.add('hidden');
                     
-                    if (docFilesCount === 0 || claFilesCount === 0) {
-                         const errorMsg = `Errore: File docenti trovati: ${docFilesCount}, File classi trovati: ${claFilesCount}. Entrambi sono necessari.`;
-                         console.error(errorMsg);
-                         statusMessage.textContent = errorMsg + " Riprova a caricare tutti i file.";
-                         statusMessage.classList.add("text-red-600", "font-semibold");
-                         weeklyView.classList.add('hidden'); 
+                    if (docFilesCount === 0) {
+                         console.error("Nessun file docente valido è stato caricato. Controllo euristica fallito.");
+                         // Mostra l'errore anche nell'UI
+                         weeklyTbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-600 font-semibold">Errore: Nessun file docente valido è stato riconosciuto. Controlla la console per i dettagli.</td></tr>';
                     } else {
-                         // Dati validi, SALVA in Firestore
-                         await saveSchedulesToFirestore(); // <-- NUOVA CHIAMATA
-                         
-                         // Renderizza la tabella e mostra la vista
                          renderWeeklyTable();
-                         weeklyView.classList.remove('hidden');
                     }
+                    
+                    weeklyView.classList.remove('hidden');
                 })
                 .catch((error) => {
                     console.error("Errore durante il processamento dei file:", error);
                     loadingSpinner.classList.add('hidden');
-                    statusMessage.textContent = `Si è verificato un errore: ${error.message}`;
-                    statusMessage.classList.add("text-red-600", "font-semibold");
+                    // Non usare alert()
+                    console.error("Si è verificato un errore durante il caricamento di alcuni file.");
                 });
         }
-        
-        /**
-         * Popola la tabella settimanale con i docenti
-         */
-        function renderWeeklyTable() {
-            weeklyTbody.innerHTML = ''; // Pulisce la tabella
-            
-            // Ordina i nomi dei docenti
-            const sortedTeachers = Object.keys(teacherSchedules).sort();
-            
-            if (sortedTeachers.length === 0) {
-                 weeklyTbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Nessun docente trovato negli orari.</td></tr>';
-                 return;
-            }
 
-            // Aggiunge listener per i click sugli header dei giorni
-            document.querySelectorAll('#weekly-table th[data-day]').forEach(th => {
-                th.addEventListener('click', () => showDailyView(th.dataset.day));
-            });
-
-            // Crea una riga per ogni docente
-            for (const teacherName of sortedTeachers) {
-                const tr = document.createElement('tr');
-                tr.classList.add('hover:bg-gray-50');
-                tr.innerHTML = `<td class="p-3 whitespace-nowrap text-sm font-medium text-gray-900">${teacherName}</td>`;
-                for (const day of Object.keys(dayColumnMap)) {
-                    const td = document.createElement('td');
-                    td.classList.add('p-3', 'text-center');
-                    // Sostituisci checkbox con input di testo
-                    td.innerHTML = `<input type="text" 
-                                           class="absence-input w-20 text-center border border-gray-300 rounded-md p-1 text-sm uppercase" 
-                                           data-teacher="${teacherName}" 
-                                           data-day="${day}"
-                                           placeholder="A / 3,4">`;
-                    tr.appendChild(td);
-                }
-                weeklyTbody.appendChild(tr);
-            }
-        }
-
-        /**
-         * Esegue il parsing del CSV di un docente
-         */
-        function parseTeacherSchedule(csvText, fileName) {
-            const lines = csvText.split(/\r?\n/);
-            // La prima riga, colonna 0, è il nome
-            const teacherName = lines[0].split(',')[0].trim();
-            if (!teacherName || teacherName.length < 3) {
-                 console.warn(`Nome docente non valido nel file ${fileName}: ${teacherName}`);
-                 return false;
-            }
-
-            teacherSchedules[teacherName] = {};
-            if (!teacherSubjects[teacherName]) {
-                 teacherSubjects[teacherName] = new Set();
-            }
-
-            const days = Object.keys(dayColumnMap); // ['Lun', 'Mar', ...]
-            
-            // Itera le righe dell'orario (dalla 1 alla 10)
-            for (let i = 0; i < timeSlots.length; i++) {
-                const lineIndex = i + 1; // Le righe CSV partono da 1 (dopo l'intestazione)
-                if (lineIndex >= lines.length) break;
-
-                const cols = lines[lineIndex].split(',');
-                
-                for (const day of days) {
-                    const colIndex = dayColumnMap[day];
-                    if (colIndex >= cols.length) continue;
-
-                    const entry = cols[colIndex].trim();
-                    if (!teacherSchedules[teacherName][day]) {
-                        teacherSchedules[teacherName][day] = [];
-                    }
-                    teacherSchedules[teacherName][day][i] = entry; // Salva l'impegno per quell'ora
-
-                    // Popola l'elenco delle materie
-                    if (entry && !entry.toLowerCase().includes('ora disposizione')) {
-                        const subject = entry.split(' - ')[1]?.trim().replace('.', '');
-                        if (subject) {
-                            teacherSubjects[teacherName].add(subject);
-                        }
-                    }
-                }
-            }
-            // Converte il Set in Array per salvarlo (JSON non supporta Set)
-            teacherSubjects[teacherName] = Array.from(teacherSubjects[teacherName]);
-            return true;
-        }
-
-        /**
-         * Esegue il parsing del CSV di una classe
-         */
-        function parseClassSchedule(csvText, fileName) {
-            const lines = csvText.split(/\r?\n/);
-            // La prima riga, colonna 0, è il nome della classe
-            const className = lines[0].split(',')[0].trim();
-            if (!className || className.length > 5) {
-                console.warn(`Nome classe non valido nel file ${fileName}: ${className}`);
-                return false;
-            }
-
-            classSchedules[className] = {};
-            classCouncils[className] = new Set(); // Usiamo un Set per evitare duplicati
-
-            const days = Object.keys(dayColumnMap); // ['Lun', 'Mar', ...]
-
-            // Itera le righe dell'orario (dalla 1 alla 10)
-            for (let i = 0; i < timeSlots.length; i++) {
-                const lineIndex = i + 1;
-                if (lineIndex >= lines.length) break;
-                
-                const cols = lines[lineIndex].split(',');
-
-                for (const day of days) {
-                    const colIndex = dayColumnMap[day];
-                    if (colIndex >= cols.length) continue;
-
-                    const entry = cols[colIndex].trim();
-                    if (!classSchedules[className][day]) {
-                        classSchedules[className][day] = [];
-                    }
-                    classSchedules[className][day][i] = entry; // Salva l'impegno
-
-                    // Popola il consiglio di classe
-                    if (entry) {
-                        // Gestisce compresenze (es. "MAT - ROSSI / FIS - BIANCHI")
-                        const teachers = entry.split(' / ').map(e => e.split(' - ')[1]?.trim()).filter(Boolean);
-                        teachers.forEach(t => classCouncils[className].add(t));
-                    }
-                }
-            }
-            // Converte il Set in Array per salvarlo
-            classCouncils[className] = Array.from(classCouncils[className]);
-            return true;
-        }
-
-        /**
-         * Filtra i docenti presenti e trova quelli a disposizione in una data ora
-         */
-        function getAvailableTeachers(hourIndex, dayName, allPresentTeachers) {
-            const currentHour = hourIndex + 1; // Ora 1-based
-
-            return allPresentTeachers.filter(teacherName => {
-                // 1. Controlla se è a disposizione
-                const scheduleEntry = teacherSchedules[teacherName]?.[dayName]?.[hourIndex];
-                if (!scheduleEntry || !scheduleEntry.toLowerCase().includes('ora disposizione')) {
-                    return false; // Non è a disposizione
-                }
-
-                // 2. Controlla se è in permesso breve in quest'ora specifica
-                const input = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${dayName}"]`);
-                // Usiamo toUpperCase() per coerenza, anche se 'A' è già filtrato
-                const absenceValue = input?.value.trim().toUpperCase() || ''; 
-                
-                if (absenceValue === '') {
-                     // Non è in permesso breve, è presente
-                     return true; 
-                }
-
-                // È in permesso parziale (es. "3,4,5")
-                // Filtriamo anche per NaN se l'utente scrive "3,"
-                const absentHours = absenceValue.split(',')
-                                          .map(h => parseInt(h.trim(), 10))
-                                          .filter(h => !isNaN(h));
-                
-                if (absentHours.includes(currentHour)) {
-                    return false; // È a disposizione, ma in permesso in quest'ora
-                }
-
-                return true; // È a disposizione e non in permesso in quest'ora
-            });
-        }
-
-        /**
-         * Trova un sostituto seguendo la logica delle priorità
-         */
-        function findSubstitute(absentee, absentClass, absentSubject, availableTeachers) {
-            const { name: absentTeacherName } = absentee;
-            
-            // Priorità 1: Docente della Classe (colore Azzurro)
-            const classCouncil = classCouncils[absentClass] || [];
-            const p1_substitute = availableTeachers.find(t => classCouncil.includes(t));
-            if (p1_substitute) {
-                return { substitute: p1_substitute, reason: "Docente della Classe", color: "bg-blue-50", textColor: "text-gray-900" };
-            }
-
-            // Priorità 2: Stessa Materia (colore Arancione)
-            const absentTeacherSubjects = teacherSubjects[absentTeacherName] || [];
-            const p2_substitute = availableTeachers.find(t => {
-                const subSubjects = teacherSubjects[t] || [];
-                // Controlla se c'è almeno una materia in comune
-                return subSubjects.some(subSubject => absentTeacherSubjects.includes(subSubject));
-            });
-            if (p2_substitute) {
-                return { substitute: p2_substitute, reason: "Stessa Materia", color: "bg-orange-50", textColor: "text-gray-900" };
-            }
-
-            // Priorità 3: Disponibilità Generica (colore Verde)
-            if (availableTeachers.length > 0) {
-                const p3_substitute = availableTeachers[0]; // Prende il primo disponibile
-                return { substitute: p3_substitute, reason: "Disponibilità Generica", color: "bg-green-50", textColor: "text-gray-900" };
-            }
-
-            // Caso 4: Sostituto NON Trovato (colore Rosso)
-            return { substitute: "NON TROVATO", reason: "Nessun docente disponibile", color: "bg-red-50", textColor: "text-red-700" };
-        }
-        
         /**
          * Trova docenti in compresenza che possono essere "spezzati"
          */
@@ -802,13 +395,8 @@
                 let dataListHtml = `<datalist id="${dataListId}">`;
                 if (breakableCoTeachers.length > 0) {
                     dataListHtml += `<optgroup label="Spezzando Compresenza">`;
-                    // Usiamo un Set per evitare doppioni se un docente è in compresenza e a disp.
-                    const breakableNames = new Set();
                     for (const coTeacher of breakableCoTeachers) {
-                        if (!availableNow.includes(coTeacher.name)) { // Mostra solo se non è GIA' a disposizione
-                           dataListHtml += `<option value="${coTeacher.name} (da ${coTeacher.fromClass} con ${coTeacher.with})"></option>`;
-                           breakableNames.add(coTeacher.name);
-                        }
+                        dataListHtml += `<option value="${coTeacher.name} (da ${coTeacher.fromClass} con ${coTeacher.with})"></option>`;
                     }
                     dataListHtml += `</optgroup>`;
                 }
@@ -931,4 +519,7 @@
     </script>
 </body>
 </html>
+
+
+
 
