@@ -130,11 +130,17 @@
 
         <!-- Vista Giornaliera ("Foglio Giorno") -->
         <div id="daily-view" class="hidden mt-12 bg-white rounded-lg shadow-md overflow-hidden">
-            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+             <div class="p-6 border-b border-gray-200 flex flex-wrap justify-between items-center gap-4">
                 <h2 id="daily-view-title" class="text-2xl font-semibold text-gray-800">Gestione Sostituzioni</h2>
-                <button id="back-to-week" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-                    &larr; Torna alla Settimana
-                </button>
+                 <div class="flex gap-2">
+                     <!-- Pulsante Copia (con nuovo formato) -->
+                     <button id="copy-table-btn" class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                         Copia Tabella per Foglio Elettronico
+                     </button>
+                     <button id="back-to-week" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                         &larr; Torna alla Settimana
+                     </button>
+                 </div>
             </div>
             <div class="daily-table-container">
                 <table id="daily-table" class="min-w-full divide-y divide-gray-200">
@@ -151,6 +157,8 @@
                         <!-- Righe generate da JS -->
                     </tbody>
                 </table>
+                 <!-- Area di testo temporanea per il copia/incolla -->
+                 <textarea id="clipboard-helper" class="absolute -left-full -top-full"></textarea>
             </div>
         </div>
 
@@ -168,6 +176,7 @@
 
         // Mappa delle colonne dei giorni
         const dayColumnMap = { 'Lun': 1, 'Mar': 2, 'Mer': 3, 'Gio': 4, 'Ven': 5 };
+        const dayTitlesFull = { Lun: "Lunedì", Mar: "Martedì", Mer: "Mercoledì", Gio: "Giovedì", Ven: "Venerdì" }; // Per estrarre il nome giorno
         // Timeslot come da file (10 ore)
         const timeSlots = ["8.00", "8.50", "9.40", "10.30", "11.20", "12.10", "13.00", "13.50", "14.40", "15.30"];
 
@@ -180,6 +189,8 @@
         const dailyTbody = document.getElementById('daily-tbody');
         const dailyViewTitle = document.getElementById('daily-view-title');
         const backToWeekBtn = document.getElementById('back-to-week');
+        const copyTableBtn = document.getElementById('copy-table-btn'); 
+        const clipboardHelper = document.getElementById('clipboard-helper'); 
         
         // Elementi DOM per Uploader e Stato
         const csvUploader = document.getElementById('csv-uploader');
@@ -204,39 +215,31 @@
                 const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
 
                 if (savedData) {
-                    // "Passo 3" (Uso normale) - Dati trovati!
                     console.log("Dati caricati da localStorage");
                     const data = JSON.parse(savedData);
-                    
-                    // Popola le variabili globali
                     teacherSchedules = data.teacherSchedules || {};
                     classSchedules = data.classSchedules || {};
                     classCouncils = data.classCouncils || {};
                     teacherSubjects = data.teacherSubjects || {};
-                    
-                    // Aggiorna l'UI
                     statusTitle.textContent = "Orari Caricati";
                     statusMessage.textContent = "Orari caricati con successo dal browser. Puoi iniziare a pianificare le assenze.";
                     uploaderContainer.classList.add('hidden');
-                    clearSchedulesBtn.classList.remove('hidden'); // Mostra il pulsante "Resetta"
-                    
-                    // Renderizza la tabella
+                    clearSchedulesBtn.classList.remove('hidden'); 
                     renderWeeklyTable();
                     weeklyView.classList.remove('hidden');
 
                 } else {
-                    // "Passo 2" (Prima volta) - Nessun dato trovato
                     console.log("Nessun orario trovato nel browser. Mostro l'uploader.");
                     statusTitle.textContent = "Benvenuto!";
                     statusMessage.textContent = "Nessun orario trovato. Per iniziare, carica i file CSV (docenti e classi). Verranno salvati automaticamente nel browser.";
-                    uploaderContainer.classList.remove('hidden'); // Mostra l'uploader
+                    uploaderContainer.classList.remove('hidden'); 
                     clearSchedulesBtn.classList.add('hidden');
                 }
             } catch (error) {
                 console.error("Errore nel caricare i dati da localStorage:", error);
                 statusMessage.textContent = `Errore di lettura dal browser: ${error.message}. Prova a ricaricare i file.`;
                 statusMessage.classList.add("text-red-600", "font-semibold");
-                uploaderContainer.classList.remove('hidden'); // Mostra uploader come fallback
+                uploaderContainer.classList.remove('hidden'); 
             }
         }
 
@@ -244,19 +247,16 @@
          * Salva gli orari processati su localStorage
          */
         function saveSchedulesToLocalStorage() {
-            // Crea un unico oggetto da salvare
             const dataToSave = {
                 teacherSchedules,
                 classSchedules,
                 classCouncils,
                 teacherSubjects,
-                savedAt: new Date().toISOString() // Data salvataggio
+                savedAt: new Date().toISOString() 
             };
-            
             try {
                 statusMessage.textContent = "Salvataggio orari nel browser...";
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
-                
                 console.log("Orari salvati con successo in localStorage!");
                 statusMessage.textContent = "Orari salvati nel browser per i futuri accessi.";
                 statusTitle.textContent = "Orari Caricati e Salvati";
@@ -276,23 +276,21 @@
          * Resetta gli orari (elimina da localStorage e ricarica la pagina)
          */
         clearSchedulesBtn.addEventListener('click', () => {
-            statusMessage.textContent = "Eliminazione orari dal browser in corso...";
-            statusMessage.classList.remove("text-red-600", "font-semibold");
-            
-            try {
-                localStorage.removeItem(LOCAL_STORAGE_KEY);
-                console.log("Dati eliminati. Ricaricamento pagina.");
-                statusMessage.textContent = "Orari resettati. Ricaricamento in corso...";
-                // Ricarica la pagina per ricominciare il processo (mostrerà l'uploader)
-                location.reload(); 
-            } catch (error) {
-                console.error("Errore nell'eliminazione da localStorage:", error);
-                statusMessage.textContent = `Errore durante il reset: ${error.message}`;
-                statusMessage.classList.add("text-red-600", "font-semibold");
+            if (confirm("Sei sicuro di voler cancellare gli orari salvati? Dovrai ricaricare i file CSV.")) {
+                statusMessage.textContent = "Eliminazione orari dal browser in corso...";
+                statusMessage.classList.remove("text-red-600", "font-semibold");
+                try {
+                    localStorage.removeItem(LOCAL_STORAGE_KEY);
+                    console.log("Dati eliminati. Ricaricamento pagina.");
+                    statusMessage.textContent = "Orari resettati. Ricaricamento in corso...";
+                    location.reload(); 
+                } catch (error) {
+                    console.error("Errore nell'eliminazione da localStorage:", error);
+                    statusMessage.textContent = `Errore durante il reset: ${error.message}`;
+                    statusMessage.classList.add("text-red-600", "font-semibold");
+                }
             }
         });
-        // --- FINE SEZIONE LOCALSTORAGE ---
-
 
         // Event listener per il caricamento file
         csvUploader.addEventListener('change', handleFiles);
@@ -303,28 +301,22 @@
             weeklyView.classList.remove('hidden');
             window.scrollTo(0, weeklyView.offsetTop);
         });
+        
+        // Event listener per il pulsante "Copia"
+        copyTableBtn.addEventListener('click', copyDailyTableToClipboard); 
 
         /**
-         * Gestisce i file CSV caricati dall'utente (MODIFICATA)
+         * Gestisce i file CSV caricati dall'utente
          */
         function handleFiles(event) {
             const files = event.target.files;
             if (files.length === 0) return;
 
-            // Resetta gli store
-            teacherSchedules = {};
-            classSchedules = {};
-            classCouncils = {};
-            teacherSubjects = {};
-            loadingSpinner.classList.remove('hidden');
-            weeklyTbody.innerHTML = '';
-            weeklyView.classList.add('hidden');
-            dailyView.classList.add('hidden');
-            statusMessage.textContent = "Elaborazione file CSV..."; // Messaggio di caricamento
+            teacherSchedules = {}; classSchedules = {}; classCouncils = {}; teacherSubjects = {};
+            loadingSpinner.classList.remove('hidden'); weeklyTbody.innerHTML = ''; weeklyView.classList.add('hidden'); dailyView.classList.add('hidden');
+            statusMessage.textContent = "Elaborazione file CSV..."; 
 
-            const promises = [];
-            let docFilesCount = 0; // Contatore per file docenti
-            let claFilesCount = 0; // Contatore per file classi
+            const promises = []; let docFilesCount = 0; let claFilesCount = 0;
 
             for (const file of files) {
                 const promise = new Promise((resolve, reject) => {
@@ -332,84 +324,36 @@
                     reader.onload = (e) => {
                         try {
                             const text = e.target.result;
-                            
-                            // *** INIZIO LOGICA DI RICONOSCIMENTO FILE ***
                             const lines = text.split(/\r?\n/);
-                            if (lines.length < 2) { 
-                                console.warn(`File saltato: ${file.name} è troppo corto o vuoto.`);
-                                resolve();
-                                return;
-                            }
-
-                            const firstLine = lines[0];
-                            const namePart = firstLine.split(',')[0].trim();
-
-                            if (!namePart) {
-                                console.warn(`File saltato: ${file.name} non ha un nome nella prima riga.`);
-                                resolve();
-                                return;
-                            }
-
-                            // Heuristic: Nomi docenti hanno spazio (es. "ROSSI M."), classi no (es. "1A").
-                            if (namePart.includes(' ')) {
-                                // È un file DOCENTE
-                                if (parseTeacherSchedule(text, file.name)) {
-                                    docFilesCount++;
-                                }
-                            } else {
-                                // È un file CLASSE
-                                if (parseClassSchedule(text, file.name)) {
-                                    claFilesCount++;
-                                }
-                            }
-                            // *** FINE LOGICA DI RICONOSCIMENTO FILE ***
-                            
+                            if (lines.length < 2) { console.warn(`File saltato: ${file.name} corto/vuoto.`); resolve(); return; }
+                            const firstLine = lines[0]; const namePart = firstLine.split(',')[0].trim();
+                            if (!namePart) { console.warn(`File saltato: ${file.name} senza nome.`); resolve(); return; }
+                            if (namePart.includes(' ')) { if (parseTeacherSchedule(text, file.name)) docFilesCount++; } 
+                            else { if (parseClassSchedule(text, file.name)) claFilesCount++; }
                             resolve();
-                        } catch (error) {
-                            console.error(`Errore nel processare il file ${file.name}:`, error);
-                            reject(error);
-                        }
+                        } catch (error) { console.error(`Errore ${file.name}:`, error); reject(error); }
                     };
-                    reader.onerror = (e) => {
-                        console.error(`Errore nel leggere il file ${file.name}:`, e);
-                        reject(e);
-                    }
-                    reader.readAsText(file); // Usa encoding default (UTF-8)
+                    reader.onerror = (e) => { console.error(`Errore lettura ${file.name}:`, e); reject(e); }
+                    reader.readAsText(file); 
                 });
                 promises.push(promise);
             }
 
-            // Aspetta che tutti i file siano stati processati
-            Promise.all(promises)
-                .then(() => { // Rimosso async, non serve await
-                    console.log(`Processamento completato. File docenti validi: ${docFilesCount}, File classi validi: ${claFilesCount}`);
-                    console.log('Orari docenti processati:', teacherSchedules);
-                    console.log('Orari classi processati:', classSchedules);
-                    console.log('Consigli di classe processati:', classCouncils);
-                    console.log('Materie docenti processate:', teacherSubjects);
-                    
+            Promise.all(promises).then(() => { 
+                    console.log(`OK. Docenti: ${docFilesCount}, Classi: ${claFilesCount}`);
+                    // console.log('Orari doc:', teacherSchedules); console.log('Orari cla:', classSchedules); 
+                    // console.log('Consigli:', classCouncils); console.log('Materie:', teacherSubjects); // Commentato per pulizia log
                     loadingSpinner.classList.add('hidden');
-                    
                     if (docFilesCount === 0 || claFilesCount === 0) {
-                         const errorMsg = `Errore: File docenti trovati: ${docFilesCount}, File classi trovati: ${claFilesCount}. Entrambi sono necessari.`;
-                         console.error(errorMsg);
-                         statusMessage.textContent = errorMsg + " Riprova a caricare tutti i file.";
-                         statusMessage.classList.add("text-red-600", "font-semibold");
-                         weeklyView.classList.add('hidden'); 
+                         const errorMsg = `Errore: File docenti: ${docFilesCount}, classi: ${claFilesCount}. Necessari entrambi.`;
+                         console.error(errorMsg); statusMessage.textContent = errorMsg + " Riprova."; statusMessage.classList.add("text-red-600", "font-semibold"); weeklyView.classList.add('hidden'); 
                     } else {
-                         // Dati validi, SALVA in localStorage
-                         saveSchedulesToLocalStorage(); // <-- CHIAMATA MODIFICATA
-                         
-                         // Renderizza la tabella e mostra la vista
-                         renderWeeklyTable();
-                         weeklyView.classList.remove('hidden');
+                         saveSchedulesToLocalStorage(); 
+                         renderWeeklyTable(); weeklyView.classList.remove('hidden');
                     }
-                })
-                .catch((error) => {
-                    console.error("Errore durante il processamento dei file:", error);
-                    loadingSpinner.classList.add('hidden');
-                    statusMessage.textContent = `Si è verificato un errore: ${error.message}`;
-                    statusMessage.classList.add("text-red-600", "font-semibold");
+                }).catch((error) => {
+                    console.error("Errore processamento:", error); loadingSpinner.classList.add('hidden');
+                    statusMessage.textContent = `Errore: ${error.message}`; statusMessage.classList.add("text-red-600", "font-semibold");
                 });
         }
         
@@ -417,38 +361,20 @@
          * Popola la tabella settimanale con i docenti
          */
         function renderWeeklyTable() {
-            weeklyTbody.innerHTML = ''; // Pulisce la tabella
-            
-            // Ordina i nomi dei docenti
+            weeklyTbody.innerHTML = ''; 
             const sortedTeachers = Object.keys(teacherSchedules).sort();
-            
-            if (sortedTeachers.length === 0) {
-                 weeklyTbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Nessun docente trovato negli orari.</td></tr>';
-                 return;
-            }
+            if (sortedTeachers.length === 0) { weeklyTbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Nessun docente.</td></tr>'; return; }
 
-            // Aggiunge listener per i click sugli header dei giorni
-            document.querySelectorAll('#weekly-table th[data-day]').forEach(th => {
-                th.addEventListener('click', () => showDailyView(th.dataset.day));
-            });
+            document.querySelectorAll('#weekly-table th[data-day]').forEach(th => { th.addEventListener('click', () => showDailyView(th.dataset.day)); });
 
-            // Crea una riga per ogni docente
             for (const teacherName of sortedTeachers) {
-                const tr = document.createElement('tr');
-                tr.classList.add('hover:bg-gray-50');
+                const tr = document.createElement('tr'); tr.classList.add('hover:bg-gray-50');
                 tr.innerHTML = `<td class="p-3 whitespace-nowrap text-sm font-medium text-gray-900">${teacherName}</td>`;
                 for (const day of Object.keys(dayColumnMap)) {
-                    const td = document.createElement('td');
-                    td.classList.add('p-3', 'text-center');
-                    // Sostituisci checkbox con input di testo
-                    td.innerHTML = `<input type="text" 
-                                           class="absence-input w-20 text-center border border-gray-300 rounded-md p-1 text-sm uppercase" 
-                                           data-teacher="${teacherName}" 
-                                           data-day="${day}"
-                                           placeholder="A / 3,4">`;
+                    const td = document.createElement('td'); td.classList.add('p-3', 'text-center');
+                    td.innerHTML = `<input type="text" class="absence-input w-20 text-center border border-gray-300 rounded-md p-1 text-sm uppercase" data-teacher="${teacherName}" data-day="${day}" placeholder="A / 3,4">`;
                     tr.appendChild(td);
-                }
-                weeklyTbody.appendChild(tr);
+                } weeklyTbody.appendChild(tr);
             }
         }
 
@@ -456,133 +382,64 @@
          * Esegue il parsing del CSV di un docente
          */
         function parseTeacherSchedule(csvText, fileName) {
-            const lines = csvText.split(/\r?\n/);
-            // La prima riga, colonna 0, è il nome
-            const teacherName = lines[0].split(',')[0].trim();
-            if (!teacherName || teacherName.length < 3) {
-                 console.warn(`Nome docente non valido nel file ${fileName}: ${teacherName}`);
-                 return false;
-            }
-
-            teacherSchedules[teacherName] = {};
-            if (!teacherSubjects[teacherName]) {
-                 teacherSubjects[teacherName] = new Set();
-            }
-
-            const days = Object.keys(dayColumnMap); // ['Lun', 'Mar', ...]
-            
-            // Itera le righe dell'orario (dalla 1 alla 10)
+            const lines = csvText.split(/\r?\n/); const teacherName = lines[0].split(',')[0].trim();
+            if (!teacherName || teacherName.length < 3) { console.warn(`Nome docente non valido ${fileName}: ${teacherName}`); return false; }
+            teacherSchedules[teacherName] = {}; if (!teacherSubjects[teacherName]) { teacherSubjects[teacherName] = new Set(); }
+            const days = Object.keys(dayColumnMap); 
             for (let i = 0; i < timeSlots.length; i++) {
-                const lineIndex = i + 1; // Le righe CSV partono da 1 (dopo l'intestazione)
-                if (lineIndex >= lines.length) break;
-
+                const lineIndex = i + 1; if (lineIndex >= lines.length) break;
                 const cols = lines[lineIndex].split(',');
-                
                 for (const day of days) {
-                    const colIndex = dayColumnMap[day];
-                    if (colIndex >= cols.length) continue;
-
+                    const colIndex = dayColumnMap[day]; if (colIndex >= cols.length) continue;
                     const entry = cols[colIndex].trim();
-                    if (!teacherSchedules[teacherName][day]) {
-                        teacherSchedules[teacherName][day] = [];
-                    }
-                    teacherSchedules[teacherName][day][i] = entry; // Salva l'impegno per quell'ora
-
-                    // Popola l'elenco delle materie
+                    if (!teacherSchedules[teacherName][day]) teacherSchedules[teacherName][day] = [];
+                    teacherSchedules[teacherName][day][i] = entry; 
                     if (entry && !entry.toLowerCase().includes('ora disposizione')) {
                         const subject = entry.split(' - ')[1]?.trim().replace('.', '');
-                        if (subject) {
-                            teacherSubjects[teacherName].add(subject);
-                        }
+                        if (subject) teacherSubjects[teacherName].add(subject);
                     }
                 }
-            }
-            // Converte il Set in Array per salvarlo (JSON non supporta Set)
-            teacherSubjects[teacherName] = Array.from(teacherSubjects[teacherName]);
-            return true;
+            } teacherSubjects[teacherName] = Array.from(teacherSubjects[teacherName]); return true;
         }
 
         /**
          * Esegue il parsing del CSV di una classe
          */
         function parseClassSchedule(csvText, fileName) {
-            const lines = csvText.split(/\r?\n/);
-            // La prima riga, colonna 0, è il nome della classe
-            const className = lines[0].split(',')[0].trim();
-            if (!className || className.length > 5) {
-                console.warn(`Nome classe non valido nel file ${fileName}: ${className}`);
-                return false;
-            }
-
-            classSchedules[className] = {};
-            classCouncils[className] = new Set(); // Usiamo un Set per evitare duplicati
-
-            const days = Object.keys(dayColumnMap); // ['Lun', 'Mar', ...]
-
-            // Itera le righe dell'orario (dalla 1 alla 10)
+            const lines = csvText.split(/\r?\n/); const className = lines[0].split(',')[0].trim();
+            if (!className || className.length > 5) { console.warn(`Nome classe non valido ${fileName}: ${className}`); return false; }
+            classSchedules[className] = {}; classCouncils[className] = new Set(); 
+            const days = Object.keys(dayColumnMap); 
             for (let i = 0; i < timeSlots.length; i++) {
-                const lineIndex = i + 1;
-                if (lineIndex >= lines.length) break;
-                
+                const lineIndex = i + 1; if (lineIndex >= lines.length) break;
                 const cols = lines[lineIndex].split(',');
-
                 for (const day of days) {
-                    const colIndex = dayColumnMap[day];
-                    if (colIndex >= cols.length) continue;
-
+                    const colIndex = dayColumnMap[day]; if (colIndex >= cols.length) continue;
                     const entry = cols[colIndex].trim();
-                    if (!classSchedules[className][day]) {
-                        classSchedules[className][day] = [];
-                    }
-                    classSchedules[className][day][i] = entry; // Salva l'impegno
-
-                    // Popola il consiglio di classe
+                    if (!classSchedules[className][day]) classSchedules[className][day] = [];
+                    classSchedules[className][day][i] = entry; 
                     if (entry) {
-                        // Gestisce compresenze (es. "MAT - ROSSI / FIS - BIANCHI")
                         const teachers = entry.split(' / ').map(e => e.split(' - ')[1]?.trim()).filter(Boolean);
                         teachers.forEach(t => classCouncils[className].add(t));
                     }
                 }
-            }
-            // Converte il Set in Array per salvarlo
-            classCouncils[className] = Array.from(classCouncils[className]);
-            return true;
+            } classCouncils[className] = Array.from(classCouncils[className]); return true;
         }
 
         /**
          * Filtra i docenti presenti e trova quelli a disposizione in una data ora
          */
         function getAvailableTeachers(hourIndex, dayName, allPresentTeachers) {
-            const currentHour = hourIndex + 1; // Ora 1-based
-
+            const currentHour = hourIndex + 1; 
             return allPresentTeachers.filter(teacherName => {
-                // 1. Controlla se è a disposizione
                 const scheduleEntry = teacherSchedules[teacherName]?.[dayName]?.[hourIndex];
-                if (!scheduleEntry || !scheduleEntry.toLowerCase().includes('ora disposizione')) {
-                    return false; // Non è a disposizione
-                }
-
-                // 2. Controlla se è in permesso breve in quest'ora specifica
+                if (!scheduleEntry || !scheduleEntry.toLowerCase().includes('ora disposizione')) return false; 
                 const input = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${dayName}"]`);
-                // Usiamo toUpperCase() per coerenza, anche se 'A' è già filtrato
                 const absenceValue = input?.value.trim().toUpperCase() || ''; 
-                
-                if (absenceValue === '') {
-                     // Non è in permesso breve, è presente
-                     return true; 
-                }
-
-                // È in permesso parziale (es. "3,4,5")
-                // Filtriamo anche per NaN se l'utente scrive "3,"
-                const absentHours = absenceValue.split(',')
-                                          .map(h => parseInt(h.trim(), 10))
-                                          .filter(h => !isNaN(h));
-                
-                if (absentHours.includes(currentHour)) {
-                    return false; // È a disposizione, ma in permesso in quest'ora
-                }
-
-                return true; // È a disposizione e non in permesso in quest'ora
+                if (absenceValue === '') return true; 
+                const absentHours = absenceValue.split(',').map(h => parseInt(h.trim(), 10)).filter(h => !isNaN(h));
+                if (absentHours.includes(currentHour)) return false; 
+                return true; 
             });
         }
 
@@ -591,32 +448,13 @@
          */
         function findSubstitute(absentee, absentClass, absentSubject, availableTeachers) {
             const { name: absentTeacherName } = absentee;
-            
-            // Priorità 1: Docente della Classe (colore Azzurro)
             const classCouncil = classCouncils[absentClass] || [];
             const p1_substitute = availableTeachers.find(t => classCouncil.includes(t));
-            if (p1_substitute) {
-                return { substitute: p1_substitute, reason: "Docente della Classe", color: "bg-blue-50", textColor: "text-gray-900" };
-            }
-
-            // Priorità 2: Stessa Materia (colore Arancione)
+            if (p1_substitute) return { substitute: p1_substitute, reason: "Docente della Classe", color: "bg-blue-50", textColor: "text-gray-900" };
             const absentTeacherSubjects = teacherSubjects[absentTeacherName] || [];
-            const p2_substitute = availableTeachers.find(t => {
-                const subSubjects = teacherSubjects[t] || [];
-                // Controlla se c'è almeno una materia in comune
-                return subSubjects.some(subSubject => absentTeacherSubjects.includes(subSubject));
-            });
-            if (p2_substitute) {
-                return { substitute: p2_substitute, reason: "Stessa Materia", color: "bg-orange-50", textColor: "text-gray-900" };
-            }
-
-            // Priorità 3: Disponibilità Generica (colore Verde)
-            if (availableTeachers.length > 0) {
-                const p3_substitute = availableTeachers[0]; // Prende il primo disponibile
-                return { substitute: p3_substitute, reason: "Disponibilità Generica", color: "bg-green-50", textColor: "text-gray-900" };
-            }
-
-            // Caso 4: Sostituto NON Trovato (colore Rosso)
+            const p2_substitute = availableTeachers.find(t => (teacherSubjects[t] || []).some(subSubject => absentTeacherSubjects.includes(subSubject)));
+            if (p2_substitute) return { substitute: p2_substitute, reason: "Stessa Materia", color: "bg-orange-50", textColor: "text-gray-900" };
+            if (availableTeachers.length > 0) return { substitute: availableTeachers[0], reason: "Disponibilità Generica", color: "bg-green-50", textColor: "text-gray-900" };
             return { substitute: "NON TROVATO", reason: "Nessun docente disponibile", color: "bg-red-50", textColor: "text-red-700" };
         }
         
@@ -625,223 +463,283 @@
          */
         function findBreakableCoTeachers(hourIndex, dayName, allPresentTeachers) {
             let options = [];
-            // Itera su tutti gli orari delle classi
             for (const className in classSchedules) {
                 const entry = classSchedules[className]?.[dayName]?.[hourIndex];
-                
-                // Cerca una compresenza (es. "MAT - ROSSI / FIS - BIANCHI")
                 if (entry && entry.includes(' / ')) {
                     const teachers = entry.split(' / ').map(e => e.split(' - ')[1]?.trim()).filter(Boolean);
-                    
-                    // Se ci sono due docenti E entrambi sono nell'elenco dei "presenti"
                     if (teachers.length === 2 && allPresentTeachers.includes(teachers[0]) && allPresentTeachers.includes(teachers[1])) {
-                        // Aggiungi entrambi i docenti come opzioni "spezzabili"
                         options.push({ name: teachers[0], fromClass: className, with: teachers[1] });
                         options.push({ name: teachers[1], fromClass: className, with: teachers[0] });
                     }
                 }
-            }
-            return options;
+            } return options;
         }
-
 
         /**
          * Mostra la vista giornaliera ("Foglio Giorno") per il giorno selezionato
          */
         function showDailyView(dayName) {
-            const dayTitles = { Lun: "Lunedì", Mar: "Martedì", Mer: "Mercoledì", Gio: "Giovedì", Ven: "Venerdì" };
-            
-            dailyViewTitle.textContent = `Gestione Sostituzioni per ${dayTitles[dayName]}`;
-            weeklyView.classList.add('hidden');
-            dailyView.classList.remove('hidden');
-            dailyTbody.innerHTML = ''; 
+            dailyViewTitle.textContent = `Gestione Sostituzioni per ${dayTitlesFull[dayName]}`;
+            weeklyView.classList.add('hidden'); dailyView.classList.remove('hidden'); dailyTbody.innerHTML = ''; 
             window.scrollTo(0, 0); 
-
-            // Trova tutti i docenti *presenti* oggi (non assenti "A" tutto il giorno)
             const allPresentTeachers = Object.keys(teacherSchedules).filter(teacherName => {
                 const input = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${dayName}"]`);
                 const absenceValue = input?.value.trim().toUpperCase() || '';
-                return absenceValue !== 'A'; // Include presenti e assenti parziali
+                return absenceValue !== 'A'; 
             });
 
-            // Itera attraverso le 10 ore
             for (let hourIndex = 0; hourIndex < timeSlots.length; hourIndex++) {
                 const hourSlot = timeSlots[hourIndex];
                 const hourLabel = `${hourIndex + 1}a Ora <span class="text-xs text-gray-400">(${hourSlot})</span>`;
-                const currentHour = hourIndex + 1; // Ora 1-based per controllo permessi
-
-                // 1. Trova docenti assenti CHE HANNO LEZIONE in quest'ora
+                const currentHour = hourIndex + 1; 
+                const assignedSubsThisHour = []; 
                 const absentTeachersThisHour = [];
                 for (const teacherName in teacherSchedules) {
                     const input = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${dayName}"]`);
                     const absenceValue = input?.value.trim().toUpperCase() || '';
-
-                    if (absenceValue === '') {
-                        continue; // Presente
+                    if (absenceValue === '') continue; 
+                    let isAbsentThisHour = false;
+                    if (absenceValue === 'A') isAbsentThisHour = true; 
+                    else {
+                        const absentHours = absenceValue.split(',').map(h => parseInt(h.trim(), 10)).filter(h => !isNaN(h));
+                        if (absentHours.includes(currentHour)) isAbsentThisHour = true;
                     }
+                    if (isAbsentThisHour) {
+                        const scheduleEntry = teacherSchedules[teacherName]?.[dayName]?.[hourIndex];
+                        if (scheduleEntry && !scheduleEntry.toLowerCase().includes('ora disposizione')) {
+                            const parts = scheduleEntry.split(' - ');
+                            absentTeachersThisHour.push({ name: teacherName, class: parts[0]?.trim(), subject: parts[1]?.trim().replace('.', ''), fullEntry: scheduleEntry });
+                        }
+                    }
+                }
+                const availableNow = getAvailableTeachers(hourIndex, dayName, allPresentTeachers);
+                const breakableCoTeachers = findBreakableCoTeachers(hourIndex, dayName, allPresentTeachers);
+                const dataListId = `dl-${dayName}-${hourIndex}`;
+                let dataListHtml = `<datalist id="${dataListId}">`;
+                if (breakableCoTeachers.length > 0) {
+                    dataListHtml += `<optgroup label="Spezzando Compresenza">`;
+                    const breakableNames = new Set();
+                    breakableCoTeachers.forEach(coTeacher => {
+                        if (!availableNow.includes(coTeacher.name) && !assignedSubsThisHour.includes(coTeacher.name)) { 
+                           dataListHtml += `<option value="${coTeacher.name} (da ${coTeacher.fromClass} con ${coTeacher.with})"></option>`;
+                           breakableNames.add(coTeacher.name);
+                        }
+                    }); dataListHtml += `</optgroup>`;
+                }
+                if (availableNow.length > 0) {
+                     dataListHtml += `<optgroup label="A Disposizione">`;
+                    availableNow.forEach(available => { if (!assignedSubsThisHour.includes(available)) dataListHtml += `<option value="${available}"></option>`; });
+                     dataListHtml += `</optgroup>`;
+                } dataListHtml += "</datalist>";
 
+                if (absentTeachersThisHour.length === 0) {
+                    const trulyAvailableNow = availableNow.filter(t => !assignedSubsThisHour.includes(t));
+                    const displayAvailable = trulyAvailableNow.join(', ') || '<em class="text-gray-400">Nessuno (libero/già assegnato)</em>';
+                    const tr = document.createElement('tr'); const tempTd = document.createElement('td'); tempTd.innerHTML = dataListHtml; 
+                    tr.innerHTML = `<td class="p-3 text-sm font-medium text-gray-900">${hourLabel}</td><td class="p-3 text-sm text-gray-500 italic">/</td><td class="p-3 text-sm text-gray-500 italic">/</td><td class="p-3 text-sm text-gray-700">${displayAvailable}</td><td class="p-3 text-sm text-gray-500 italic">Docenti a Disp.</td>`;
+                    if (tr.cells[3]) tr.cells[3].appendChild(tempTd.querySelector('datalist')); // Check if cell exists
+                    dailyTbody.appendChild(tr);
+                } else {
+                    for (let i = 0; i < absentTeachersThisHour.length; i++) {
+                        const absentee = absentTeachersThisHour[i];
+                        const { name, class: absentClass, subject: absentSubject, fullEntry } = absentee;
+                        let substituteResult = null; let isCoPresence = false;
+                        const classScheduleEntry = classSchedules[absentClass]?.[dayName]?.[hourIndex];
+                        if (classScheduleEntry && classScheduleEntry.includes(' / ')) {
+                            const teachersInClass = classScheduleEntry.split(' / ').map(entry => entry.split(' - ')[1]?.trim());
+                            const otherTeacherPresent = teachersInClass.find(tName => tName && tName !== name && allPresentTeachers.includes(tName) && !assignedSubsThisHour.includes(tName));
+                            if (otherTeacherPresent) {
+                                isCoPresence = true;
+                                substituteResult = { substitute: `(${otherTeacherPresent})`, reason: "Copertura in Compresenza", color: "bg-yellow-50", textColor: "text-gray-900" };
+                                assignedSubsThisHour.push(otherTeacherPresent); 
+                            }
+                        }
+                        if (!isCoPresence) {
+                            const trulyAvailableNow = availableNow.filter(t => !assignedSubsThisHour.includes(t));
+                            substituteResult = findSubstitute(absentee, absentClass, absentSubject, trulyAvailableNow);
+                            if (substituteResult.substitute !== "NON TROVATO") assignedSubsThisHour.push(substituteResult.substitute);
+                        }
+                        const tr = document.createElement('tr'); tr.className = substituteResult.color;
+                        const tdHour = document.createElement('td'); tdHour.className = `p-3 text-sm font-medium ${substituteResult.textColor}`; tdHour.innerHTML = i === 0 ? hourLabel : ''; 
+                        const tdAbsent = document.createElement('td'); tdAbsent.className = `p-3 text-sm font-semibold text-red-700`; tdAbsent.textContent = name;
+                        const tdClass = document.createElement('td'); tdClass.className = `p-3 text-sm text-red-700`; tdClass.textContent = fullEntry;
+                        const tdSub = document.createElement('td'); tdSub.className = `p-0 relative`; 
+                        const subInput = document.createElement('input'); subInput.type = 'text'; subInput.className = `sub-input ${substituteResult.color}`; subInput.value = substituteResult.substitute; subInput.setAttribute('list', dataListId); 
+                        tdSub.appendChild(subInput); tdSub.insertAdjacentHTML('beforeend', dataListHtml); 
+                        const tdReason = document.createElement('td'); tdReason.className = `p-0`;
+                        const reasonInput = document.createElement('input'); reasonInput.type = 'text'; reasonInput.className = `sub-input ${substituteResult.color}`; reasonInput.value = substituteResult.reason;
+                        tdReason.appendChild(reasonInput);
+                        const setManualOverride = () => {
+                            const previousValue = subInput._previousValue || substituteResult.substitute; 
+                            if (previousValue !== "NON TROVATO" && !previousValue.startsWith('(') && assignedSubsThisHour.includes(previousValue)) {
+                                const index = assignedSubsThisHour.indexOf(previousValue); if (index > -1) { assignedSubsThisHour.splice(index, 1); console.log(`Rimosso ${previousValue} (override).`); }
+                            }
+                            subInput.className = `sub-input bg-purple-50`; reasonInput.className = `sub-input bg-purple-50`; tr.className = `bg-purple-50`; 
+                            if (reasonInput.value === substituteResult.reason) reasonInput.value = "Modifica Manuale";
+                            const newValue = subInput.value.trim().split(' ')[0]; // Prende solo il nome prima di "(da..."
+                             if (newValue && newValue !== "NON TROVATO" && !newValue.startsWith('(') && teacherSchedules[newValue] && !assignedSubsThisHour.includes(newValue)) {
+                                 assignedSubsThisHour.push(newValue); console.log(`Aggiunto ${newValue} (override).`);
+                            } subInput._previousValue = newValue; 
+                        };
+                        subInput._previousValue = substituteResult.substitute; 
+                        subInput.addEventListener('input', setManualOverride); reasonInput.addEventListener('input', setManualOverride);
+                        tr.appendChild(tdHour); tr.appendChild(tdAbsent); tr.appendChild(tdClass); tr.appendChild(tdSub); tr.appendChild(tdReason);
+                        dailyTbody.appendChild(tr);
+                    }
+                }
+            }
+        }
+        
+       /**
+         * MODIFICATO: Copia la tabella nel formato Docenti Assenti x Ore
+         */
+        function copyDailyTableToClipboard() {
+            const dailyTable = document.getElementById('daily-table');
+            if (!dailyTable || Object.keys(teacherSchedules).length === 0) return;
+
+            // Estrai il giorno corrente dal titolo
+            const titleText = dailyViewTitle.textContent;
+            let currentDayShort = '';
+            for (const key in dayTitlesFull) {
+                if (titleText.includes(dayTitlesFull[key])) {
+                    currentDayShort = key;
+                    break;
+                }
+            }
+            if (!currentDayShort) { console.error("Impossibile determinare il giorno corrente dal titolo."); return; }
+
+            let tsvData = '';
+            const allTeachersSorted = Object.keys(teacherSchedules).sort();
+
+            // *** 1. Identifica Docenti Assenti (o in permesso) per il giorno ***
+            const absentTeachersToday = allTeachersSorted.filter(teacherName => {
+                const weeklyInput = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${currentDayShort}"]`);
+                return weeklyInput?.value.trim() !== ''; // È assente se l'input non è vuoto
+            });
+
+            if (absentTeachersToday.length === 0) {
+                 // Usa una notifica meno invasiva dell'alert
+                 copyTableBtn.textContent = 'Nessun Assente!';
+                 setTimeout(() => { copyTableBtn.textContent = 'Copia Tabella per Foglio Elettronico'; }, 2000);
+                 console.log("Nessun docente assente o in permesso oggi.");
+                 return; // Non copiare nulla se non ci sono assenti
+            }
+
+            // *** 2. Genera Intestazione ***
+            const hourHeaders = timeSlots.map((slot, index) => `${index + 1}a Ora (${slot})`);
+            tsvData += "Docente Assente\t" + hourHeaders.join('\t') + '\n'; // Usa TAB
+
+            // *** 3. Itera SOLO sui Docenti Assenti ***
+            absentTeachersToday.forEach(teacherName => {
+                tsvData += teacherName + '\t'; // Prima colonna: Nome docente assente
+                const rowData = [];
+                const weeklyInput = document.querySelector(`input[data-teacher="${teacherName}"][data-day="${currentDayShort}"]`);
+                const absenceValue = weeklyInput?.value.trim().toUpperCase() || ''; // Non dovrebbe essere vuoto qui
+
+                for (let hourIndex = 0; hourIndex < timeSlots.length; hourIndex++) {
+                    const currentHour = hourIndex + 1;
+                    let cellContent = ''; // Contenuto di default
+
+                    // Controlla se è assente IN QUESTA ORA specifica
                     let isAbsentThisHour = false;
                     if (absenceValue === 'A') {
-                        isAbsentThisHour = true; // Assente tutto il giorno
-                    } else {
-                        // Controlla permesso breve, es. "3,4,5"
-                        // Aggiungiamo un filtro per NaN (es. se scrive "3,")
-                        const absentHours = absenceValue.split(',')
-                                                      .map(h => parseInt(h.trim(), 10))
-                                                      .filter(h => !isNaN(h));
+                        isAbsentThisHour = true;
+                    } else if (absenceValue !== '') {
+                        const absentHours = absenceValue.split(',').map(h => parseInt(h.trim(), 10)).filter(h => !isNaN(h));
                         if (absentHours.includes(currentHour)) {
                             isAbsentThisHour = true;
                         }
                     }
 
                     if (isAbsentThisHour) {
-                        const scheduleEntry = teacherSchedules[teacherName]?.[dayName]?.[hourIndex];
-                        // Considera assente solo se ha una lezione (non "ora disposizione")
-                        if (scheduleEntry && !scheduleEntry.toLowerCase().includes('ora disposizione')) {
-                            const parts = scheduleEntry.split(' - ');
-                            const absentClass = parts[0]?.trim();
-                            const absentSubject = parts[1]?.trim().replace('.', '');
-                            absentTeachersThisHour.push({ name: teacherName, class: absentClass, subject: absentSubject, fullEntry: scheduleEntry });
+                        const scheduleEntry = teacherSchedules[teacherName]?.[currentDayShort]?.[hourIndex];
+                        const isTeaching = scheduleEntry && !scheduleEntry.toLowerCase().includes('ora disposizione');
+
+                        if (isTeaching) {
+                            // Cerca il sostituto nella tabella giornaliera visualizzata
+                            let substituteName = "ERR: Riga non trovata";
+                            let substituteReason = "";
+                            const dailyRows = dailyTbody.querySelectorAll('tr');
+                            let foundRow = false;
+                            
+                            // Cerca la riga corrispondente all'ora e al docente assente
+                             let currentProcessingHour = 0;
+                             for(const row of dailyRows) {
+                                  const hourCellHtml = row.cells[0]?.innerHTML || '';
+                                  const match = hourCellHtml.match(/^(\d+)a Ora/);
+                                  if (match) {
+                                     currentProcessingHour = parseInt(match[1], 10);
+                                  }
+                                  // Se siamo nell'ora giusta E il docente assente corrisponde
+                                  if(currentProcessingHour === currentHour) {
+                                     const absentCell = row.cells[1];
+                                     if (absentCell?.textContent.trim() === teacherName) {
+                                         const subInput = row.cells[3]?.querySelector('input');
+                                         const reasonInput = row.cells[4]?.querySelector('input');
+                                         substituteName = subInput?.value.trim() || "N/D";
+                                         substituteReason = reasonInput?.value.trim() || "N/D";
+                                         foundRow = true;
+                                         break; // Trovato, esci dal ciclo delle righe
+                                     }
+                                  }
+                                  if (currentProcessingHour > currentHour) break; // Ottimizzazione: siamo andati oltre l'ora cercata
+                             } // Fine ciclo righe
+
+
+                            if (foundRow) {
+                                 if (substituteName.startsWith('(')) { // Caso Compresenza
+                                     cellContent = `Coperto da Compresenza ${substituteName}`;
+                                 } else if (substituteName === "NON TROVATO") {
+                                     cellContent = "NON SOSTITUITO";
+                                 } else {
+                                     cellContent = `SOSTITUITO DA: ${substituteName} (${substituteReason})`;
+                                 }
+                             } else {
+                                 // Se non troviamo la riga, potrebbe essere un bug o un caso limite
+                                 cellContent = "ASSENTE (Info Sostituzione Mancante)";
+                             }
+
+                        } else {
+                            // Era assente ma era a disposizione o aveva ora libera
+                            cellContent = "ASSENTE (D/Libero)";
                         }
+                    } else {
+                        // Non è assente in quest'ora (es. fine permesso breve)
+                        cellContent = ""; // Cella vuota
                     }
-                }
-
-                // 2. Trova docenti a disposizione in quest'ora
-                const availableNow = getAvailableTeachers(hourIndex, dayName, allPresentTeachers);
-                
-                // 2.5 Trova docenti "spezzabili" da compresenze
-                const breakableCoTeachers = findBreakableCoTeachers(hourIndex, dayName, allPresentTeachers);
-                
-                // Crea il datalist per i suggerimenti
-                const dataListId = `dl-${dayName}-${hourIndex}`;
-                let dataListHtml = `<datalist id="${dataListId}">`;
-                if (breakableCoTeachers.length > 0) {
-                    dataListHtml += `<optgroup label="Spezzando Compresenza">`;
-                    // Usiamo un Set per evitare doppioni se un docente è in compresenza e a disp.
-                    const breakableNames = new Set();
-                    for (const coTeacher of breakableCoTeachers) {
-                        if (!availableNow.includes(coTeacher.name)) { // Mostra solo se non è GIA' a disposizione
-                           dataListHtml += `<option value="${coTeacher.name} (da ${coTeacher.fromClass} con ${coTeacher.with})"></option>`;
-                           breakableNames.add(coTeacher.name);
-                        }
-                    }
-                    dataListHtml += `</optgroup>`;
-                }
-                // Aggiungiamo anche i docenti a disposizione "normali" ai suggerimenti
-                if (availableNow.length > 0) {
-                     dataListHtml += `<optgroup label="A Disposizione">`;
-                    for (const available of availableNow) {
-                         dataListHtml += `<option value="${available}"></option>`;
-                    }
-                     dataListHtml += `</optgroup>`;
-                }
-                dataListHtml += "</datalist>";
+                    // Aggiungi la cella alla riga (con escape per virgolette)
+                     rowData.push(`"${cellContent.replace(/"/g, '""')}"`);
+                } // Fine ciclo ore (colonne)
+                tsvData += rowData.join('\t') + '\n'; // Completa la riga del docente assente
+            }); // Fine ciclo docenti assenti
 
 
-                // 3. Costruisci le righe della tabella
-                if (absentTeachersThisHour.length === 0) {
-                    // Nessun assente, mostra solo l'ora e chi è a disposizione
-                    const availableStr = availableNow.length > 0 ? availableNow.join(', ') : '<em class="text-gray-400">Nessuno</em>';
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td class="p-3 text-sm font-medium text-gray-900">${hourLabel}</td>
-                        <td class="p-3 text-sm text-gray-500 italic">/</td>
-                        <td class="p-3 text-sm text-gray-500 italic">/</td>
-                        <td class="p-3 text-sm text-gray-700">${availableStr} ${dataListHtml}</td> <!-- Aggiunto datalist anche qui -->
-                        <td class="p-3 text-sm text-gray-500 italic">Docenti a Disp.</td>
-                    `;
-                    dailyTbody.appendChild(tr);
-                } else {
-                    // Ci sono uno o più assenti
-                    for (let i = 0; i < absentTeachersThisHour.length; i++) {
-                        const absentee = absentTeachersThisHour[i];
-                        const { name, class: absentClass, subject: absentSubject, fullEntry } = absentee;
-                        
-                        let substituteResult = null;
+            // Copia negli appunti (stesso meccanismo di prima)
+            try {
+                clipboardHelper.value = tsvData;
+                clipboardHelper.select();
+                document.execCommand('copy');
+                console.log('Tabella Docenti Assenti x Ore copiata negli appunti.');
 
-                        // Priorità 0: Controllo Compresenza (colore Giallo)
-                        let isCoPresence = false;
-                        const classScheduleEntry = classSchedules[absentClass]?.[dayName]?.[hourIndex];
-                        
-                        if (classScheduleEntry && classScheduleEntry.includes(' / ')) {
-                            const teachersInClass = classScheduleEntry.split(' / ').map(entry => entry.split(' - ')[1]?.trim());
-                            const otherTeacherPresent = teachersInClass.find(tName => {
-                                if (!tName || tName === name) return false; // Non controllare se stesso
-                                return allPresentTeachers.includes(tName); // Controlla se l'altro docente è nell'elenco dei presenti
-                            });
+                const originalText = copyTableBtn.textContent;
+                copyTableBtn.textContent = 'Copiato!';
+                copyTableBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                copyTableBtn.classList.add('bg-gray-500');
+                setTimeout(() => {
+                    copyTableBtn.textContent = originalText;
+                    copyTableBtn.classList.remove('bg-gray-500');
+                    copyTableBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                }, 1500); 
 
-                            if (otherTeacherPresent) {
-                                isCoPresence = true;
-                                substituteResult = { substitute: `(${otherTeacherPresent})`, reason: "Copertura in Compresenza", color: "bg-yellow-50", textColor: "text-gray-900" };
-                            }
-                        }
-                        
-                        // Priorità 1-3: Ricerca Sostituto
-                        if (!isCoPresence) {
-                            substituteResult = findSubstitute(absentee, absentClass, absentSubject, availableNow);
-                        }
-                        
-                        // Renderizza la riga
-                        const tr = document.createElement('tr');
-                        tr.className = substituteResult.color;
-                        
-                        const tdHour = document.createElement('td');
-                        tdHour.className = `p-3 text-sm font-medium ${substituteResult.textColor}`;
-                        tdHour.innerHTML = i === 0 ? hourLabel : '';
-                        
-                        const tdAbsent = document.createElement('td');
-                        tdAbsent.className = `p-3 text-sm font-semibold text-red-700`;
-                        tdAbsent.textContent = name;
-                        
-                        const tdClass = document.createElement('td');
-                        tdClass.className = `p-3 text-sm text-red-700`;
-                        tdClass.textContent = fullEntry;
-
-                        // --- Cella Sostituto (Modificabile) ---
-                        const tdSub = document.createElement('td');
-                        tdSub.className = `p-0`; // Padding zero per far riempire l'input
-                        const subInput = document.createElement('input');
-                        subInput.type = 'text';
-                        subInput.className = `sub-input ${substituteResult.color}`;
-                        subInput.value = substituteResult.substitute;
-                        subInput.setAttribute('list', dataListId); // Collega al datalist
-                        tdSub.appendChild(subInput); // **FIX: Append before insertAdjacentHTML**
-                        // Aggiunge il datalist (nascosto) DOPO aver aggiunto l'input al DOM
-                        tdSub.insertAdjacentHTML('beforeend', dataListHtml); 
-
-                        // --- Cella Motivazione (Modificabile) ---
-                        const tdReason = document.createElement('td');
-                        tdReason.className = `p-0`;
-                        const reasonInput = document.createElement('input');
-                        reasonInput.type = 'text';
-                        reasonInput.className = `sub-input ${substituteResult.color}`;
-                        reasonInput.value = substituteResult.reason;
-                        tdReason.appendChild(reasonInput);
-
-                        // Funzione per cambiare colore in "Manuale" (Viola)
-                        const setManualOverride = () => {
-                            subInput.className = `sub-input bg-purple-50`;
-                            reasonInput.className = `sub-input bg-purple-50`;
-                            tr.className = `bg-purple-50`; // Cambia colore anche alla riga
-                            if (reasonInput.value === substituteResult.reason) {
-                                reasonInput.value = "Modifica Manuale";
-                            }
-                        };
-                        
-                        subInput.addEventListener('input', setManualOverride);
-                        reasonInput.addEventListener('input', setManualOverride);
-
-                        tr.appendChild(tdHour);
-                        tr.appendChild(tdAbsent);
-                        tr.appendChild(tdClass);
-                        tr.appendChild(tdSub);
-                        tr.appendChild(tdReason);
-                        
-                        dailyTbody.appendChild(tr);
-                    }
-                }
+            } catch (err) {
+                console.error('Errore durante la copia:', err);
+                 const originalText = copyTableBtn.textContent;
+                 copyTableBtn.textContent = 'Errore Copia';
+                 setTimeout(() => { copyTableBtn.textContent = originalText; }, 2000);
             }
+            clipboardHelper.blur();
         }
+
 
     </script>
 </body>
